@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DATABASE_URL: postgresql://arc:arc@localhost:5432/arc?schema=public
+  REDIS_URL: redis://localhost:6379
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: arc
+          POSTGRES_PASSWORD: arc
+          POSTGRES_DB: arc
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U arc -d arc"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Format
+        run: pnpm format:check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      # Fails the build if a context reaches into another context's internals.
+      # This is what keeps "modular monolith" a checked claim rather than a label.
+      - name: Architecture boundaries
+        run: pnpm boundaries
+
+      - name: Migrate
+        run: pnpm prisma migrate deploy --schema prisma/schema.prisma
+
+      - name: Test
+        run: pnpm test

@@ -1,0 +1,37 @@
+{
+  "name": "arc",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "boundaries": "depcruise packages --config .dependency-cruiser.cjs",
+    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm boundaries && pnpm test",
+    "db:up": "docker compose -f ops/docker-compose.yml up -d",
+    "db:down": "docker compose -f ops/docker-compose.yml down",
+    "db:migrate": "prisma migrate dev --schema prisma/schema.prisma"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "@types/node": "^22.10.2",
+    "dependency-cruiser": "^16.9.0",
+    "eslint": "^9.17.0",
+    "fast-check": "^3.23.2",
+    "prettier": "^3.4.2",
+    "prisma": "^6.1.0",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.18.1",
+    "vitest": "^2.1.8",
+    "zod": "^3.24.1"
+  },
+  "type": "module"
+}
