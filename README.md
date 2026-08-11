@@ -1,5 +1,10 @@
 # Arc
 
+[![CI](https://github.com/el-uno/fintech_arc/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/el-uno/fintech_arc/actions/workflows/ci.yml)
+[![Node](https://img.shields.io/badge/node-%E2%89%A522-3c873a)](https://nodejs.org)
+[![TypeScript](https://img.shields.io/badge/typescript-strict-3178c6)](tsconfig.base.json)
+[![Licence](https://img.shields.io/badge/licence-MIT-blue)](#licence)
+
 **A simulation of cross-border stablecoin and fiat infrastructure for the EU↔Africa corridor.**
 
 Arc models the backend of a payments business that moves money between Europe and Africa in seconds: multi-currency virtual accounts in, an instant swap to stablecoin, chain-agnostic settlement, and a local-rail payout out. It serves consumers and enterprises directly, and exposes the same rails to fintechs and exchanges through a white-label **Last Mile API**.
