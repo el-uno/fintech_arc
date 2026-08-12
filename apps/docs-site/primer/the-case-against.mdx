@@ -1,0 +1,135 @@
+---
+title: 'The case against'
+description: 'The BIS argument that stablecoins fail the three tests of sound money — singleness, elasticity, integrity — taken seriously rather than strawmanned.'
+icon: 'scale-unbalanced'
+---
+
+<span className="arc-eyebrow">The corridor problem · 5 of 5</span>
+
+Most documentation for a stablecoin system does not have this page. It should. An architecture is only defensible if you know what the strongest objection to it is, and the strongest objection is not from a sceptical blogger — it is from the Bank for International Settlements, the central bank of central banks.
+
+The BIS position, set out in [Chapter III of its 2025 Annual Economic Report](https://www.bis.org/publ/arpdf/ar2025e3.htm) and developed since, is blunt: stablecoins **fail the three tests of sound money**, and should not be the mainstay of the monetary system.
+
+Here is that argument, made as well as I can make it, followed by what it does and does not imply for a corridor product.
+
+---
+
+## Test 1 — Singleness
+
+<div className="arc-claim">
+  **The test.** A dollar is a dollar. Money issued by different banks is accepted by everyone at
+  par, without hesitation and without asking whose it is. Economists call this the singleness of
+  money, and it is the property that makes a monetary system a *system* rather than a collection of
+  competing instruments.
+</div>
+
+**The failure.** Stablecoin holdings are tagged with their issuer. USDC and USDT are not interchangeable; they trade against each other at rates that move, and in stress they move a lot. The BIS comparison is direct and unflattering: this resembles the private banknotes of the US Free Banking era, where a note from an Ohio bank traded at a discount in New York and the discount depended on how far away and how trusted the issuer was.
+
+That comparison is not rhetorical decoration. It is a claim that we have run this experiment before, and the reason it ended was that a monetary system where you must price the issuer is one where every transaction carries a credit assessment.
+
+**Is it right?** Largely, yes — and it is observable rather than theoretical. Depegs happen, secondary-market spreads widen under stress, and the market clearly does _not_ treat all dollar stablecoins as one asset.
+
+---
+
+## Test 2 — Elasticity
+
+<div className="arc-claim">
+  **The test.** A monetary system must be able to expand and contract with the economy's need for
+  settlement, so that obligations are discharged in a timely way without gridlock. Central bank
+  balance sheets and intraday credit do this: the system supplies liquidity when payments need to
+  clear.
+</div>
+
+**The failure.** A fully-reserved stablecoin is by construction inelastic. New tokens require full upfront payment. That is a cash-in-advance constraint, and it means the supply cannot expand to meet a settlement need — it can only expand when someone brings dollars.
+
+The BIS point is that in a stressed moment, the ability to extend intraday credit is precisely what keeps a payment system from gridlocking, and a fully-reserved instrument has no such capacity by design.
+
+**Is it right?** Yes as stated, but notice it is an argument about stablecoins as _the mainstay_ of a monetary system, not as an instrument within one. Full reserving is a feature from the holder's perspective and a limitation from the system's. Both are true simultaneously.
+
+---
+
+## Test 3 — Integrity
+
+<div className="arc-claim">
+  **The test.** The system must be able to resist financial crime — to know who is transacting well
+  enough to detect and stop illicit flows.
+</div>
+
+**The failure.** Transfers between unhosted wallets on a public chain have no intermediary performing checks. There is no bank in the middle, which is the selling point and the problem in the same sentence.
+
+**Is it right?** Partly, and this is where the argument is weakest. On-chain transfers are _more_ traceable than cash and considerably more traceable than the correspondent chains they replace — the whole graph is public and permanent, which is why blockchain analytics is a functioning industry. The genuine integrity gap is not visibility; it is **attribution and enforceability**: knowing which legal person controls an address, and having a party with the obligation and the ability to stop a transfer.
+
+That is a real gap, and it is exactly what the 2026 rulemaking is aimed at — the [FinCEN/OFAC joint proposed rule](https://home.treasury.gov/news/press-releases/sb0435) is an attempt to put a compliance obligation on issuers rather than on the chain.
+
+---
+
+## The two objections the BIS makes that hurt most
+
+Beyond the three tests, two arguments deserve more weight than they usually get in vendor material.
+
+<AccordionGroup>
+  <Accordion title="Dollarisation by the back door" icon="flag">
+    About **99% of stablecoin supply is dollar-denominated.** A Kenyan or Nigerian household holding value in USDC has made a monetary choice with macroeconomic consequences: it weakens domestic monetary transmission, shrinks the base of the local currency, and moves seigniorage abroad.
+
+    Framed as user empowerment this looks like a feature. Framed from a central bank's chair it is capital flight in a new wrapper, and the BIS has been explicit that emerging markets carry the risk. **Both framings are describing the same flows.** A corridor operator should be able to state this plainly rather than pretend the tension does not exist.
+
+  </Accordion>
+
+  <Accordion title="The volume figures are mostly not payments" icon="chart-line">
+    Headline settlement figures are enormous — stablecoins reportedly settled around **$7.2 trillion in February 2026**, surpassing the US ACH network for the first time. That number is real, and it is also close to meaningless as a measure of economic activity.
+
+    Of roughly $28–62 trillion in raw stablecoin transfers in 2025, estimates of genuine real-economy payments land in the range of **$350–550 billion** — around 1–2%. The rest is trading, arbitrage, bridging, market-making, internal exchange movement, and bots.
+
+    Anyone citing the headline figure as evidence of payment adoption is either not reading carefully or hoping you are not. The adoption case has to be made on the filtered number, which is still substantial and growing fast, but is two orders of magnitude smaller.
+
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## What this means for Arc
+
+Taking the criticism seriously does not invalidate the design. It sharpens what the design is allowed to claim.
+
+| The objection                      | What Arc is actually doing                                                                                                                                                        |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Singleness — issuer risk is real   | Arc holds the stablecoin for **seconds**, not as a store of value. Duration is the exposure, and the saga minimises it                                                            |
+| Elasticity — no intraday credit    | Arc never extends credit. `liability.in_transit` has an overdraft floor of zero: driving it negative would mean paying out money nobody put in, and the posting engine rejects it |
+| Integrity — attribution is the gap | Both endpoints are the regulated, attributable parties. Compliance is a hard pre-condition — no transfer leaves the gate without a recorded decision                              |
+| Dollarisation                      | Genuine, and not resolved by architecture. It is a policy question a corridor operator should answer honestly rather than route around                                            |
+| Inflated volume figures            | Arc measures itself by transfers completed and the ledger balancing, never by notional throughput                                                                                 |
+
+<div className="arc-claim">
+The defensible claim is narrow: **a stablecoin is a good settlement instrument for a short-duration corridor hop between two regulated endpoints.** It is not a claim that stablecoins are money, that they should replace bank deposits, or that the middle leg being permissionless makes the product permissionless.
+
+Everything in Arc's architecture is consistent with that narrow claim, and nothing in it depends on the broad one.
+
+</div>
+
+---
+
+## Reading the other side
+
+The BIS is not a neutral party — it is an institution of central banks assessing an instrument that competes with central bank money, and that interest should be weighed. The counter-arguments worth reading make three points: that stablecoins compete with _correspondent banking_, not with central bank money; that inelasticity is a safety feature for a payment instrument as opposed to a bug in a monetary system; and that the traceability of public chains is a genuine integrity improvement over the opacity of the chains they replace.
+
+Read both. The honest position is that the BIS is right about stablecoins as money and less right about stablecoins as a settlement rail, and that most of the public argument conflates the two.
+
+<CardGroup cols={2}>
+  <Card title="The bibliography" icon="book-bookmark" href="/primer/bibliography">
+    Every source cited across the primer, with what each is good for.
+  </Card>
+  <Card title="Now read the architecture" icon="layer-group" href="/architecture/overview">
+    With the domain in hand, the design decisions stop looking arbitrary.
+  </Card>
+</CardGroup>
+
+---
+
+<span className="arc-cite">
+  Sources: [BIS Annual Economic Report 2025, Ch. III](https://www.bis.org/publ/arpdf/ar2025e3.htm) ·
+  [BIS press release, June 2025](https://www.bis.org/press/p250624.htm) · [BIS, "Stablecoins:
+  framing the debate" (2026)](https://www.bis.org/speeches/sp260420.pdf) · [Treasury illicit-finance
+  proposed rule](https://home.treasury.gov/news/press-releases/sb0435). Settlement-volume and
+  real-payment estimates are industry figures reported in 2026; treat them as indicative and see
+  [the bibliography](/primer/bibliography) for the caveats.
+</span>

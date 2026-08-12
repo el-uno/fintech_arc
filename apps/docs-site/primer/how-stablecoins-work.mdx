@@ -1,0 +1,140 @@
+---
+title: 'How stablecoins actually work'
+description: 'Issuance, redemption, reserves, and why a peg is a redemption promise rather than a property of the token.'
+icon: 'coins'
+---
+
+<span className="arc-eyebrow">The corridor problem · 2 of 5</span>
+
+The most common misconception about a stablecoin is that it is stable because of something in the token. It is not. The token is a number in a smart contract with no opinion about what a dollar is worth.
+
+<div className="arc-claim">
+  A stablecoin is worth a dollar because a specific, named legal entity promises to redeem it for a
+  dollar, and because enough people believe that entity can and will. The peg is a **credit
+  relationship**, not a technical property.
+</div>
+
+Every property that matters follows from taking that sentence seriously.
+
+---
+
+## The primary market: issuance and redemption
+
+There are two entirely different markets in a stablecoin, and confusing them is the source of most bad analysis.
+
+<Steps>
+  <Step title="Primary market — the issuer">
+    A vetted institutional client wires $10m to the issuer. The issuer mints 10m tokens and sends them to the client's address. To reverse it, the client returns 10m tokens and the issuer wires $10m back, minus fees.
+
+    This is the only place where tokens are created or destroyed, and it is **permissioned**. Access typically requires onboarding, KYB, and minimum sizes. A retail holder does not redeem with the issuer.
+
+  </Step>
+  <Step title="Secondary market — everyone else">
+    Exchanges, DeFi pools, and wallets trading tokens that already exist. Price here is set by supply and demand, and it can and does deviate from $1.00.
+  </Step>
+</Steps>
+
+The link between them is **arbitrage**. If the token trades at $0.995 on an exchange, an authorised participant buys at $0.995 and redeems at $1.00 with the issuer, pocketing the difference and removing supply until the gap closes. The peg holds as long as that arbitrage is _available, cheap and credible_.
+
+Note what breaks it: not the blockchain, not the token contract, but redemption becoming slow, gated, or doubted. In March 2023 USDC traded to roughly $0.88 because $3.3bn of its reserves were held at Silicon Valley Bank, which had just failed and whose deposits were, over one weekend, of genuinely uncertain value. The contract was fine. The chain was fine. The _promise_ was in question, so the price moved. When the deposits were guaranteed, the peg returned within days.
+
+<Note>
+  This is why "the stablecoin is on-chain, so it is trustless" is wrong for fiat-backed tokens. The
+  chain is trustless about *ownership*. The dollar behind it is a bank deposit or a Treasury bill
+  held by a company, subject to that company's solvency, its custodian's solvency, and a court's
+  willingness to enforce your claim.
+</Note>
+
+---
+
+## Reserves: what is actually behind it
+
+Reserve composition is the whole risk profile, and the categories differ enormously.
+
+| Reserve asset                              | Liquidity under stress          | What can go wrong                                                                    |
+| ------------------------------------------ | ------------------------------- | ------------------------------------------------------------------------------------ |
+| Overnight reverse repo, T-bills < 3 months | Very high                       | Very little; the intended composition                                                |
+| Bank deposits                              | Uncertain — depends on the bank | Uninsured above deposit limits; SVB is the worked example                            |
+| Longer-dated Treasuries                    | High but at a price             | Mark-to-market loss if sold early into a rising-rate environment                     |
+| Commercial paper, corporate debt           | Poor when it matters            | Priced when nobody is buying; largely abandoned by major issuers after 2021 scrutiny |
+| Other crypto assets                        | Reflexive                       | Correlated with the exact stress that triggers redemptions                           |
+
+Two structural points follow.
+
+**Duration mismatch is the classic failure.** Tokens are redeemable on demand; if reserves are not, you have built a bank without a lender of last resort. This is why post-GENIUS Act rules in the US mandate short-dated, high-quality reserves — the statute is essentially legislating away the maturity transformation.
+
+**Attestation is not audit.** Most issuers publish monthly attestations: an accounting firm confirming that on a stated date, stated assets existed. That is meaningfully weaker than a full financial-statement audit with going-concern analysis, and weaker still than continuous proof. Read what the report actually claims before treating it as a guarantee.
+
+---
+
+## The three designs, ranked by how they fail
+
+<AccordionGroup>
+  <Accordion title="Fiat-collateralised — USDC, USDT, EURC" icon="building-columns">
+    One token, one dollar in reserve, redeemable from the issuer. Roughly the entire market by volume, and **about 99% of stablecoin supply is dollar-denominated** according to BIS data — a point with real monetary-sovereignty consequences for the countries on the receiving end of a corridor.
+
+    **Fails when:** the issuer's reserves become doubted, a custodian fails, or redemption is gated. Failure is a credit event, and it is fast.
+
+    This is the only category Arc simulates, because it is the only one a regulated payments business would route customer funds through.
+
+  </Accordion>
+
+  <Accordion title="Overcollateralised crypto-backed — DAI and descendants" icon="link">
+    Lock $150 of ETH, mint $100 of stablecoin. No issuer to trust; the collateral is on-chain and verifiable. But the collateral is volatile, so the system depends on liquidations happening fast enough during exactly the moments when the chain is congested and everyone is selling.
+
+    **Fails when:** collateral falls faster than liquidators can act. The failure is mechanical and reflexive rather than a credit event.
+
+  </Accordion>
+
+  <Accordion title="Algorithmic — largely a historical category" icon="triangle-exclamation">
+    No meaningful collateral; the peg is maintained by a mint-and-burn relationship with a second, floating token. It works while demand grows and unwinds catastrophically when it stops, because the mechanism that defends the peg dilutes the asset backing it.
+
+    Terra/UST erased approximately $40bn in May 2022. The design is not a variant of the others; it is a different thing wearing the same name, and the regulatory frameworks that arrived afterwards largely define it out of the permitted set.
+
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## What this means for a payments business
+
+If you are moving customer money through a stablecoin, you are taking on the issuer's credit for the duration of the hop. Three consequences shape Arc's design:
+
+<Columns cols={2}>
+  <div>
+    **Minimise time held.**
+
+    Exposure is a function of duration. Arc's saga converts, settles and pays out in one flow rather than warehousing stablecoin between transfers — the position exists for seconds, not days.
+
+  </div>
+  <div>
+    **Make the exposure visible.**
+
+    An unhedged position must be a number someone can look at. Arc's FX position accounts (`equity.fx_position.EUR` / `.USDC`) are exactly that: the pair carries the open exposure explicitly.
+
+  </div>
+</Columns>
+
+<div className="arc-claim">
+  A stablecoin leg is a **treasury position**, not a technical implementation detail. Arc treats it
+  as one: the conversion is a journal with two currency halves that each balance independently,
+  bridged by position accounts, so the exposure appears in the trial balance rather than in a
+  spreadsheet someone maintains by hand.
+</div>
+
+That design is worked through in full on [the ledger page](/architecture/ledger#worked-example) — it is the reason a multi-currency journal cannot be a simple two-legged entry.
+
+<Card title="Next: settlement and finality" icon="clock" href="/primer/settlement-and-finality">
+  Why "instant" is a marketing word, and finality is a probability curve you choose a point on.
+</Card>
+
+---
+
+<span className="arc-cite">
+  Sources: [BIS Annual Economic Report 2025, Chapter
+  III](https://www.bis.org/publ/arpdf/ar2025e3.htm) · [BIS, "Stablecoins: framing the debate"
+  (2026)](https://www.bis.org/speeches/sp260420.pdf) · issuer reserve attestations (Circle, Tether)
+  · [GENIUS Act, S.1582, 119th
+  Congress](https://www.congress.gov/bill/119th-congress/senate-bill/1582/text). See [the
+  bibliography](/primer/bibliography).
+</span>

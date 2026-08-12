@@ -1,0 +1,128 @@
+---
+title: 'Run it locally'
+description: 'Clone, install, migrate, and run the full verification gate — format, lint, typecheck, architecture boundaries, and tests.'
+icon: 'terminal'
+---
+
+<span className="arc-eyebrow">Setup · ~5 minutes</span>
+
+Arc runs as a single deployable. There is no service mesh to stand up and no cloud account to create — the whole system boots from one command, which is the main reason it was built as a [modular monolith](/decisions/0002-modular-monolith).
+
+**Requires** Node 22+, pnpm 9, and Docker.
+
+---
+
+<Steps>
+  <Step title="Clone and install">
+    ```bash
+    git clone https://github.com/el-uno/fintech_arc.git && cd fintech_arc
+    ```
+
+    ```bash
+    pnpm install
+    ```
+
+  </Step>
+
+  <Step title="Start Postgres and Redis">
+    ```bash
+    docker compose -f ops/docker-compose.yml up -d
+    ```
+
+    Postgres holds the ledger; Redis backs the job queues. Both are pinned in `ops/docker-compose.yml`.
+
+  </Step>
+
+  <Step title="Apply the schema">
+    ```bash
+    cp .env.example .env && pnpm prisma migrate deploy --schema prisma/schema.prisma
+    ```
+
+    This is the step worth pausing on. The migrations do not just create tables — they install the constraint triggers that make the ledger invariants hold *independently of the application code*. See [enforced twice, on purpose](/architecture/ledger#enforced-twice-on-purpose).
+
+  </Step>
+
+  <Step title="Run the gate">
+    ```bash
+    pnpm verify
+    ```
+
+    Format, lint, typecheck, architecture boundaries, and the full test suite. This is exactly what CI runs; if it is green locally it is green on a pull request.
+
+  </Step>
+</Steps>
+
+---
+
+## What `pnpm verify` actually checks
+
+It is worth knowing what fails and why, because several of these gates are unusual.
+
+<AccordionGroup>
+  <Accordion title="Lint — including rules that ban floats near money" icon="ban">
+    ESLint rejects `parseFloat`, `toFixed`, `Math.round/floor/ceil`, and fractional numeric literals in source:
+
+    ```text
+    error  Fractional number literal. Monetary values are bigint minor units       no-restricted-syntax
+    error  'Math.round' is restricted — use divRound() from @arc/money             no-restricted-properties
+    error  Unexpected use of 'parseFloat'. Floats cannot represent money exactly   no-restricted-globals
+    error  toFixed() formats a float. Use Money.toDecimalString()                  no-restricted-syntax
+    ```
+
+    Exactly two files carry a scoped exception with a written justification: the seeded PRNG in `packages/chain/src/random.ts`, which does 32-bit bit-mixing, and the Jaro-Winkler implementation in `services/risk/src/sanctions.ts`, where 0.9 is an algorithm threshold rather than an amount.
+
+    [Why money is never a float →](/architecture/money)
+
+  </Accordion>
+
+  <Accordion title="Architecture boundaries — two independent layers" icon="shield-halved">
+    `dependency-cruiser` fails the build on a cross-context import. So does an ESLint `no-restricted-imports` rule.
+
+    Both are needed, and finding out why was its own small investigation: `dependency-cruiser` catches *relative* imports like `../../ledger/src/posting` but silently misses *package-name* imports like `@arc/ledger`, because that resolves through `node_modules` to a `dist` path which does not exist until after a build.
+
+    [The boundary that wasn't →](/stories/the-boundary-that-wasnt)
+
+  </Accordion>
+
+  <Accordion title="Tests — unit, property-based, and chaos" icon="flask">
+    Roughly 240 tests across the workspace. The ones that matter most are the property suite (ledger invariants under randomised sequences) and the chaos suite (a failure injected at each saga step, asserting the ledger ends balanced every time).
+
+    [What the tests prove →](/architecture/testing)
+
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## The layout you just cloned
+
+```text
+packages/
+├── money/         Money, Rate, exact rounding — property-based
+├── contracts/     Event catalogue and envelope — the seam between contexts
+├── bus/           Event bus, transactional outbox, dispatcher
+└── chain/         Chain-agnostic driver + deterministic simulator
+services/
+├── ledger/        Double-entry posting engine, balances
+├── product/       Onboarding, tiers, virtual accounts
+├── movement/      Rails, quotes, settlement saga
+└── risk/          KYC/KYB, sanctions, AML rules, review queues
+prisma/            Ledger tables with balance and append-only constraints, outbox
+ops/               Postgres + Redis
+apps/docs-site/    This site
+```
+
+`packages/` holds shared primitives that anything may import. `services/` holds the bounded contexts, which may import from `packages/` and from themselves — **never from each other**. That rule is the load-bearing one, and it is mechanically enforced rather than merely documented.
+
+---
+
+## Where to go next
+
+<CardGroup cols={2}>
+  <Card title="Read the ledger" icon="scale-balanced" href="/architecture/ledger">
+    The core. Everything else is an interface onto it.
+  </Card>
+  <Card title="Walk a transfer end to end" icon="route" href="/flows/consumer-remittance">
+    €1,000 from Germany to a Kenyan mobile-money wallet, entry by entry.
+  </Card>
+</CardGroup>

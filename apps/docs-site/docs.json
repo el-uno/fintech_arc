@@ -1,0 +1,161 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "palm",
+  "name": "Arc",
+  "description": "Arc is a simulation of cross-border stablecoin and fiat infrastructure for the EU↔Africa corridor — and a field guide to how stablecoin payments actually work.",
+  "colors": {
+    "primary": "#14B8A6",
+    "light": "#2DD4BF",
+    "dark": "#0F766E"
+  },
+  "appearance": {
+    "default": "dark"
+  },
+  "favicon": "/logo/mark.svg",
+  "logo": {
+    "light": "/logo/arc-light.svg",
+    "dark": "/logo/arc-dark.svg",
+    "href": "/"
+  },
+  "fonts": {
+    "heading": {
+      "family": "Inter"
+    },
+    "body": {
+      "family": "Inter"
+    }
+  },
+  "styling": {
+    "codeblocks": "dark",
+    "eyebrows": "breadcrumbs"
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Guide",
+        "groups": [
+          {
+            "group": "Start here",
+            "icon": "compass",
+            "pages": ["index", "start/what-arc-is", "start/reading-paths", "start/quickstart"]
+          },
+          {
+            "group": "The corridor problem",
+            "icon": "globe",
+            "pages": [
+              "primer/why-corridors-cost-so-much",
+              "primer/how-stablecoins-work",
+              "primer/settlement-and-finality",
+              "primer/regulation",
+              "primer/the-case-against",
+              "primer/bibliography"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Architecture",
+        "groups": [
+          {
+            "group": "Foundations",
+            "icon": "layer-group",
+            "pages": [
+              "architecture/overview",
+              "architecture/money",
+              "architecture/contexts-and-events"
+            ]
+          },
+          {
+            "group": "The core",
+            "icon": "book-open",
+            "pages": [
+              "architecture/ledger",
+              "architecture/chain-layer",
+              "architecture/settlement-saga",
+              "architecture/compliance"
+            ]
+          },
+          {
+            "group": "Proof",
+            "icon": "flask",
+            "pages": ["architecture/testing"]
+          },
+          {
+            "group": "Flows",
+            "icon": "route",
+            "pages": ["flows/consumer-remittance", "flows/enterprise-payout", "flows/reversal"]
+          },
+          {
+            "group": "Decisions",
+            "icon": "gavel",
+            "pages": [
+              "decisions/index",
+              "decisions/0001-money-as-integer-minor-units",
+              "decisions/0002-modular-monolith"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Stories",
+        "groups": [
+          {
+            "group": "Engineering stories",
+            "icon": "book",
+            "pages": [
+              "stories/index",
+              "stories/the-cent-that-vanished",
+              "stories/the-journal-that-balanced-and-lied",
+              "stories/the-fastest-chain-that-settled-last",
+              "stories/the-payout-that-paid-twice",
+              "stories/the-cutoff-that-cost-a-day",
+              "stories/the-boundary-that-wasnt",
+              "stories/the-quote-that-aged"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Practice",
+        "groups": [
+          {
+            "group": "Work through it",
+            "icon": "graduation-cap",
+            "pages": [
+              "practice/index",
+              "practice/ledger",
+              "practice/distributed-systems",
+              "practice/chain-and-settlement",
+              "practice/compliance"
+            ]
+          },
+          {
+            "group": "Self-check",
+            "icon": "circle-question",
+            "pages": ["practice/quiz-ledger", "practice/quiz-settlement"]
+          }
+        ]
+      }
+    ]
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "Build plan",
+        "href": "https://github.com/el-uno/fintech_arc/blob/main/docs/BUILD_PLAN.md"
+      }
+    ],
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/el-uno/fintech_arc"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/el-uno/fintech_arc"
+    }
+  },
+  "search": {
+    "prompt": "Search the corridor"
+  }
+}

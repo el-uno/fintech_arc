@@ -1,0 +1,139 @@
+---
+title: 'Arc'
+sidebarTitle: 'Overview'
+description: 'A simulation of cross-border stablecoin and fiat infrastructure for the EU↔Africa corridor — and a field guide to how stablecoin payments actually work.'
+mode: 'wide'
+---
+
+<span className="arc-eyebrow">EU ↔ Africa · stablecoin settlement · double-entry ledger</span>
+
+# Money that crosses a border in seconds, and the accounting that survives it
+
+Arc models the backend of a payments business moving value between Europe and Africa: multi-currency virtual accounts in, an instant swap to stablecoin, chain-agnostic settlement, a local-rail payout out. Three surfaces — consumer, enterprise, and a white-label **Last Mile API** — over one set of rails.
+
+This site is two documents braided together. One is the **architecture** of that system, down to the individual ledger entries. The other is a **primer on how stablecoin payments actually work in 2026** — the economics, the regulation, and the parts that don't work — because you cannot evaluate the architecture without the second.
+
+<div className="arc-claim">
+  **This is a simulation, not a financial system.** No real funds, no bank connections, no
+  blockchain. Every external integration is a deterministic simulator, and the sanctions list is
+  synthetic — no real person or entity appears in any data. Nothing here is investment, legal, or
+  compliance advice.
+</div>
+
+---
+
+## Why this corridor
+
+Sub-Saharan Africa is the most expensive place on earth to send money to. The World Bank puts the average cost of a $200 remittance to the region at **8.78%** against a UN Sustainable Development Goal target of 3% — and banks, the most expensive channel, at 9.50%.
+
+Meanwhile the same region absorbed **$205bn** of on-chain value in the year to June 2025, up 52%, with stablecoins now roughly **43%** of its crypto transaction volume. The demand is not speculative. It is people and businesses routing around correspondent banking.
+
+<div className="arc-stats">
+  <div className="arc-stat">
+    <span className="arc-stat__value">8.78%</span>
+    <span className="arc-stat__label">Average cost to send $200 to Sub-Saharan Africa</span>
+    <span className="arc-stat__source">World Bank RPW</span>
+  </div>
+  <div className="arc-stat">
+    <span className="arc-stat__value">$205bn</span>
+    <span className="arc-stat__label">On-chain value received, SSA, Jul 2024–Jun 2025</span>
+    <span className="arc-stat__source">Chainalysis</span>
+  </div>
+  <div className="arc-stat">
+    <span className="arc-stat__value">~$313bn</span>
+    <span className="arc-stat__label">Total stablecoin market cap, mid-2026</span>
+    <span className="arc-stat__source">BIS</span>
+  </div>
+  <div className="arc-stat">
+    <span className="arc-stat__value">99%</span>
+    <span className="arc-stat__label">Of that supply denominated in US dollars</span>
+    <span className="arc-stat__source">BIS</span>
+  </div>
+</div>
+
+That gap — an 8.78% legacy rail beside a rapidly growing parallel one — is the whole business case, and [Why corridors cost so much](/primer/why-corridors-cost-so-much) is where it gets taken apart properly.
+
+---
+
+## What Arc is really about
+
+A transfer that settles in seconds is easy. A transfer that settles in seconds **and cannot lose a cent when the fourth of five steps fails** is the actual engineering problem.
+
+<div className="arc-claim">
+  For every failure at every step of the settlement saga, the ledger ends balanced in every currency
+  and the sender's balance is exactly what it was.
+</div>
+
+That single sentence is the strongest correctness claim this project makes, and it is asserted by a chaos suite that fails each saga step in turn. The suite was then mutation-tested — deliberately broken code introduced to check the tests actually catch it. One mutation passed all sixteen tests, which is the subject of [the best story on this site](/stories/the-journal-that-balanced-and-lied).
+
+---
+
+## Where to go
+
+<CardGroup cols={2}>
+  <Card
+    title="I want to understand the domain"
+    icon="globe"
+    href="/primer/why-corridors-cost-so-much"
+  >
+    Start with the corridor economics, then stablecoin mechanics, finality, and the 2026 regulatory
+    picture. No code.
+  </Card>
+  <Card title="I want to read the system" icon="layer-group" href="/architecture/overview">
+    Six bounded contexts, an event bus, a double-entry ledger, a settlement saga. Diagrams and real
+    ledger entries.
+  </Card>
+  <Card title="I want the war stories" icon="book" href="/stories">
+    Seven narratives: the cent that vanished, the payout that paid twice, the fastest chain that
+    settled last.
+  </Card>
+  <Card title="I'm preparing for an interview" icon="graduation-cap" href="/practice">
+    Question banks with worked answers on ledgers, sagas, finality and compliance — plus self-check
+    quizzes.
+  </Card>
+</CardGroup>
+
+Not sure? [Reading paths](/start/reading-paths) picks a route for you in about thirty seconds.
+
+---
+
+## The three flows
+
+Everything Arc builds exists to serve these.
+
+<Steps>
+  <Step title="Consumer remittance">
+    A Kenyan diaspora worker in Germany sends EUR; a KES mobile-money wallet receives it. [Walk it
+    through →](/flows/consumer-remittance)
+  </Step>
+  <Step title="Enterprise payout">
+    A Nigerian importer funds a virtual NGN account and pays an EU supplier's IBAN via SEPA Instant.
+    [Walk it through →](/flows/enterprise-payout)
+  </Step>
+  <Step title="Partner Last Mile">
+    An exchange embeds Arc's API to offer its own users EUR payouts without building bank
+    integrations.
+  </Step>
+</Steps>
+
+One set of rails, three surfaces.
+
+---
+
+## Build status
+
+Arc is built in phases, and this table is kept honest rather than aspirational.
+
+| Phase | Scope                                                                     | Status      |
+| ----- | ------------------------------------------------------------------------- | ----------- |
+| 0     | Workspace, money primitives, event bus + outbox, boundary enforcement, CI | Complete    |
+| 1     | Double-entry ledger, balances, invariant suite                            | Complete    |
+| 2     | Accounts and multi-currency virtual accounts                              | Complete    |
+| 3     | Chain-agnostic adapter + deterministic simulator                          | Complete    |
+| 4     | Money movement: rails, quotes, the settlement saga, reversals             | Complete    |
+| 5     | Risk & compliance: KYC/KYB, sanctions, AML, review queues                 | In progress |
+| 6     | Platform: auth, gateway, webhooks, observability, secrets                 | Planned     |
+| 7     | Partner platform, sandbox, Last Mile API, SDKs                            | Planned     |
+| 8     | Reconciliation, reporting, runbooks                                       | Planned     |
+
+Pages describing planned work say so at the top. Nothing on this site claims a capability the repository does not have.

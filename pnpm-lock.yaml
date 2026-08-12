@@ -95,6 +95,15 @@ importers:
         specifier: workspace:*
         version: link:../risk
 
+  services/platform:
+    dependencies:
+      '@arc/bus':
+        specifier: workspace:*
+        version: link:../../packages/bus
+      '@arc/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+
   services/product:
     dependencies:
       '@arc/bus':

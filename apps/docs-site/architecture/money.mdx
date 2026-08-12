@@ -1,0 +1,162 @@
+---
+title: "Why money is never a float"
+description: "Integer minor units as bigint, exact arithmetic, explicit rounding policy — and the lint rules that make it impossible to do otherwise."
+icon: "calculator"
+---
+
+<span className="arc-eyebrow">Architecture · foundations</span>
+
+Every monetary value in Arc is an integer count of minor units held as a `bigint`. €100.00 is `10000n`, not `100.0`.
+
+This is the decision the rest of the system rests on, and it is worth being precise about why, because "floats are inaccurate" is the correct conclusion from a slightly wrong argument.
+
+---
+
+## The two reasons, and the second is the decisive one
+
+### Reason one: binary fractions cannot represent decimal fractions
+
+IEEE-754 doubles are binary fractions. `0.1` has no exact binary representation, in the same way `1/3` has no exact decimal one. So:
+
+```js
+0.1 + 0.2 === 0.30000000000000004  // true
+```
+
+The error is around 1e-17. That is irrelevant for a temperature reading and fatal for a system whose central invariant is that debits equal credits **exactly**.
+
+The alternative is an epsilon tolerance on the balance check — and that is where the argument actually lands:
+
+<div className="arc-claim">
+A ledger with an epsilon is not a ledger. Once you accept a tolerance, "how far off is acceptable?" has no defensible answer, the threshold is chosen by whoever is debugging that day, and the drift grows with volume. You no longer have a ledger; you have a ledger-shaped approximation.
+</div>
+
+### Reason two: 2^53 is not big enough
+
+This is the one that settles it for a chain-agnostic system, and it gets discussed less.
+
+Doubles are exact only up to 2^53 ≈ 9.007e15. In cents that is about $90 trillion, which is fine. But:
+
+| Asset | Decimals | 2^53 in whole units | Verdict |
+| --- | --- | --- | --- |
+| EUR, USD, KES | 2 | ~9e13 | Fine |
+| USDC, USDT | 6 | ~9e9 | About 9 billion — fine until it is not |
+| ETH and most ERC-20s | 18 | ~0.009 | **Hopeless** |
+
+A single 18-decimal token balance routinely exceeds 1e18 in base units. Arc settles on chains where that is the normal representation, so floats are not merely risky — they cannot hold the number at all.
+
+---
+
+## What the `Money` type actually is
+
+```ts
+Money = { amount: bigint, currency: CurrencyCode }
+```
+
+An integer count of the currency's minor unit, plus the code. `10000n` alone is meaningless — €100.00 and ¥10,000 are the same integer and very different amounts — so the currency travels with the number rather than living in a variable name or a column comment.
+
+Arithmetic is exact by construction. Addition and subtraction are `bigint` operations. Multiplication by a rate is where policy becomes necessary, and Arc makes it explicit rather than implicit.
+
+---
+
+## Rounding, and where the remainder goes
+
+Multiplying money by a rate produces a value that is usually not a whole number of minor units. A 1.5% fee on €33.33 is €0.49995. Something has to happen to the `0.00995`.
+
+Most systems drop it. Arc posts it.
+
+<Steps>
+  <Step title="divRound() produces the rounded value">
+    Under an explicitly stated rounding policy — not `Math.round`, which is banned, and which rounds a float you should not have had in the first place.
+  </Step>
+  <Step title="divResidual() returns the exact leftover">
+    The precise remainder, as a `bigint`. It exists specifically so the remainder can be given somewhere to go.
+  </Step>
+  <Step title="The residual becomes its own ledger entry">
+    Posted against a rounding account, so the journal still balances and the fraction stays auditable.
+  </Step>
+</Steps>
+
+| Account | Dr | Cr |
+| --- | --- | --- |
+| `liability.customer.va_1.EUR` | 33.33 | |
+| `liability.in_transit.EUR` | | 32.83 |
+| `revenue.fee.corridor.EUR` | | 0.49 |
+| `revenue.rounding.EUR` | | 0.01 |
+
+<div className="arc-claim">
+The residual becomes a number someone can look at, rather than drift nobody can explain. Over millions of transfers, "where did the rounding go?" is a question with an exact answer and a queryable account balance.
+</div>
+
+The full narrative is [The cent that vanished](/stories/the-cent-that-vanished).
+
+---
+
+## Value is conserved under allocation
+
+The property that stops a cent appearing or vanishing when a transfer is split into fees:
+
+<div className="arc-claim">
+Splitting any amount across any weights always sums back to **exactly** the original.
+</div>
+
+This is asserted by a property-based test across randomly generated amounts and weight vectors, not by a handful of examples. Naive allocation — round each share independently — fails it routinely: three ways of splitting €10.00 gives €3.33 each and loses a cent. The allocator distributes remainders deterministically so the total is preserved, and the test proves it holds for inputs nobody thought to write down.
+
+---
+
+## Rates are exact too
+
+`Rate` carries a numerator and denominator rather than a decimal, so inversion is lossless. A rate provider typically publishes one direction of a pair; getting the other by `Rate.invert()` costs nothing in precision, which matters because the inverted rate then feeds an FX calculation whose output is a customer-facing number.
+
+---
+
+## Enforced, not merely intended
+
+A convention that depends on every future developer remembering it is not a convention — it is a countdown. So the rule is mechanical. ESLint rejects, in source:
+
+```text
+error  Fractional number literal. Monetary values are bigint minor units       no-restricted-syntax
+error  'Math.round' is restricted — use divRound() from @arc/money             no-restricted-properties
+error  Unexpected use of 'parseFloat'. Floats cannot represent money exactly   no-restricted-globals
+error  toFixed() formats a float. Use Money.toDecimalString()                  no-restricted-syntax
+```
+
+You cannot write `0.015` in a source file. You cannot call `parseFloat`. You cannot format with `toFixed`. The build fails.
+
+### The two exceptions, both justified in writing
+
+<AccordionGroup>
+  <Accordion title="packages/chain/src/random.ts — the seeded PRNG" icon="dice">
+    mulberry32 with an FNV-1a seed hash. This is bit-mixing on a 32-bit state, not money, and distorting it to satisfy the lint rule would break the determinism the entire chain simulator depends on.
+
+    The exception is scoped to the file with a comment explaining why, and nothing it produces becomes an amount without conversion to `bigint` minor units first.
+  </Accordion>
+
+  <Accordion title="services/risk/src/sanctions.ts — Jaro-Winkler similarity" icon="magnifying-glass">
+    Name-similarity scores are 0–1 fractions. The prefix weight of 0.1 and the match threshold of 0.9 are algorithm constants, not amounts. Nothing in the file produces or consumes a monetary value.
+
+    Same treatment: a file-scoped disable with the reasoning written above it, rather than a repository-wide loosening.
+  </Accordion>
+</AccordionGroup>
+
+The pattern is the point. An exception with a written justification at the point of use is a decision; a global relaxation is an erosion.
+
+---
+
+## What this costs
+
+Honesty about the trade:
+
+- **Ergonomics.** `Money.multiply(rate)` is more typing than `amount * rate`, and every developer joining the project has to learn the type.
+- **Serialisation.** `bigint` does not survive `JSON.stringify` without help, so every boundary — API, event envelope, database — needs an explicit codec.
+- **Third-party interop.** Anything that hands you a float has to be converted at the edge, carefully, once.
+
+All three are real, and all three are one-time costs paid at boundaries. The alternative is an unbounded cost paid continuously, in the currency of "why is the trial balance off by 3 cents".
+
+<CardGroup cols={2}>
+  <Card title="ADR 0001 — the decision record" icon="scroll" href="/decisions/0001-money-as-integer-minor-units">
+    The formal record, with alternatives considered.
+  </Card>
+  <Card title="Next: the ledger" icon="scale-balanced" href="/architecture/ledger">
+    What exact arithmetic buys you: an invariant with no tolerance.
+  </Card>
+</CardGroup>

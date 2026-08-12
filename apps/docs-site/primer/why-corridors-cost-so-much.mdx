@@ -1,0 +1,145 @@
+---
+title: 'Why corridors cost so much'
+description: 'Where the 8.78% actually goes: correspondent banking, pre-funding, thin FX, and the cost of last-mile distribution.'
+icon: 'globe'
+---
+
+<span className="arc-eyebrow">The corridor problem · 1 of 5</span>
+
+A remittance is one of the simplest financial products imaginable. Someone in Germany has €1,000 and wants a specific person in Kenya to receive shillings. No credit is extended, no risk is transformed, no maturity is changed. It is a message plus a settlement.
+
+It costs, on average, **8.78%** to Sub-Saharan Africa.
+
+That figure comes from the World Bank's [Remittance Prices Worldwide](https://remittanceprices.worldbank.org/) database, which prices a standardised $200 transfer across corridors every quarter. The global average sits around **6.49%**; Sub-Saharan Africa is the most expensive receiving region on earth, at roughly triple the UN Sustainable Development Goal target of 3% (SDG 10.c). Banks, as a channel, are worse still — around 9.50% — while digital-first providers average closer to 3.65%.
+
+<div className="arc-stats">
+  <div className="arc-stat">
+    <span className="arc-stat__value">6.49%</span>
+    <span className="arc-stat__label">Global average cost of sending $200</span>
+    <span className="arc-stat__source">World Bank RPW</span>
+  </div>
+  <div className="arc-stat">
+    <span className="arc-stat__value">8.78%</span>
+    <span className="arc-stat__label">Average to Sub-Saharan Africa</span>
+    <span className="arc-stat__source">World Bank RPW</span>
+  </div>
+  <div className="arc-stat">
+    <span className="arc-stat__value">9.50%</span>
+    <span className="arc-stat__label">Banks, as a channel</span>
+    <span className="arc-stat__source">World Bank RPW</span>
+  </div>
+  <div className="arc-stat">
+    <span className="arc-stat__value">3.0%</span>
+    <span className="arc-stat__label">UN SDG 10.c target</span>
+    <span className="arc-stat__source">United Nations</span>
+  </div>
+</div>
+
+The interesting question is not _that_ it is expensive. It is **where the money goes**, because the answer determines whether a stablecoin rail helps at all — and for two of the four cost components, it does not.
+
+---
+
+## The four costs
+
+### 1. Correspondent banking
+
+There is no wire from a German bank to a Kenyan one. There is a chain of banks that each hold accounts with the next, and a payment is a sequence of debits and credits along that chain — each hop taking a fee, adding latency, and adding a party who can freeze the payment.
+
+The chain has been getting shorter for the wrong reason. **De-risking** — global banks terminating correspondent relationships in jurisdictions where the compliance cost outweighs the revenue — has cut the number of active correspondent relationships worldwide substantially since 2011, with Africa and small island states hit hardest. Fewer routes means less competition on the routes that remain, which means wider spreads. The Financial Stability Board has [tracked this decline](https://www.fsb.org/) for over a decade.
+
+<div className="arc-claim">
+  This is the cost a stablecoin rail genuinely removes. Replacing a four-hop correspondent chain
+  with one on-chain transfer between two regulated entities eliminates the intermediary fees and the
+  intermediary *discretion* at the same time.
+</div>
+
+### 2. Pre-funding and trapped working capital
+
+To pay out shillings instantly in Nairobi, someone must already hold shillings in Nairobi. Every payout corridor requires float sitting in destination accounts before any customer shows up.
+
+That capital is dead. It earns nothing useful, it is exposed to the destination currency, and it scales linearly with volume — double the corridor and you double the float. For a provider operating twenty corridors, pre-funding is frequently the single largest item on the balance sheet, and its carrying cost is passed straight to the customer in the spread.
+
+A stablecoin rail attacks this by shortening the time between funds leaving the sender and arriving at the payout partner from days to seconds, so less float is needed to cover the same volume. It does not eliminate float — you still need shillings in Nairobi — but it changes the multiplier.
+
+<Note>
+  Arc models this explicitly. Float is a real asset account (`asset.float.bank.KES`), the obligation
+  is a real liability (`liability.in_transit.KES`), and the [worked
+  example](/architecture/ledger#worked-example) shows both moving. In a system where balances are
+  derived from entries, "how much capital is trapped in this corridor right now?" is a query, not an
+  estimate.
+</Note>
+
+### 3. FX spread in a thin market
+
+EUR/USD is one of the deepest markets in the world and trades at a spread measured in fractions of a basis point. EUR/KES is not. Nor is EUR/NGN, and Nigeria has spent much of the last several years with a gap between official and parallel rates wide enough that "the exchange rate" was an ambiguous phrase.
+
+The spread on a thin pair is the honest price of someone taking currency risk in a market where they may not be able to offload it quickly. It is real economic cost, not rent — and **a stablecoin rail does not remove it.** Converting EUR → USDC → KES still requires someone to sell shillings for dollars. The chain moved the dollar leg; it did nothing to the shilling leg.
+
+<div className="arc-gap">
+  This is the most over-claimed benefit in the sector. "Instant, near-zero-cost cross-border
+  payments" describes the *middle* leg. The first and last legs are still fiat, still local, and
+  still priced by whoever holds the local currency risk. Arc reflects this by making the FX spread
+  [its own explicit fee line and its own ledger entry](/architecture/settlement-saga#quotes) rather
+  than burying it in a quoted rate — because a margin hidden in the rate is a margin invisible to
+  reporting.
+</div>
+
+### 4. Last-mile distribution
+
+The recipient needs shillings in a form they can actually use — usually an M-Pesa balance, sometimes a bank account, sometimes cash from an agent. That network exists, it costs money to run, and its operator prices access to it.
+
+Nothing about a blockchain builds an agent network in Kisumu. This cost is untouched.
+
+---
+
+## What that leaves
+
+<Columns cols={2}>
+  <div>
+    **A stablecoin rail helps with**
+
+    - Correspondent-chain fees and hops
+    - Settlement latency, therefore float requirements
+    - Weekend and holiday windows — chains do not observe bank holidays
+    - Traceability of the middle leg
+
+  </div>
+  <div>
+    **It does not help with**
+
+    - Thin-market FX spread
+    - Last-mile distribution economics
+    - KYC, sanctions screening, and AML costs
+    - The need to hold destination-currency float at all
+
+  </div>
+</Columns>
+
+A realistic claim is therefore not "near-zero cost". It is **"we removed two of the four cost layers, and the other two are now visible as line items."** That is a smaller claim and a much more defensible one, and it is the claim Arc's architecture is built to support: every fee is a separate ledger entry against its own account, so corridor P&L can attribute revenue between the corridor fee and the FX margin rather than reporting one blended number.
+
+---
+
+## Why the demand is already there
+
+The theory is beside the point, because the behaviour has already happened. Chainalysis reports Sub-Saharan Africa received **more than $205bn** in on-chain value between July 2024 and June 2025 — a 52% year-on-year increase — with stablecoins accounting for roughly **43%** of the region's crypto transaction volume, and Nigeria alone at approximately $92bn. Their [regional analysis](https://www.chainalysis.com/blog/subsaharan-africa-crypto-adoption-2025/) attributes this to inflation and foreign-currency access rather than speculation: people holding dollars because their own currency is losing value, and businesses settling in dollars because getting them through official channels is slow.
+
+<div className="arc-claim">
+  That is the demand Arc simulates serving. Not a crypto product — a payments product whose middle
+  leg happens to be a stablecoin because the alternative middle leg costs more and takes longer.
+</div>
+
+<Card title="Next: how stablecoins actually work" icon="coins" href="/primer/how-stablecoins-work">
+  Issuance, redemption, reserves, and why the peg is a redemption promise rather than a property of
+  the token.
+</Card>
+
+---
+
+<span className="arc-cite">
+  Sources: [World Bank, Remittance Prices Worldwide](https://remittanceprices.worldbank.org/) ·
+  [World Bank remittance cost indicators](https://data.worldbank.org/indicator/SI.RMT.COST.IB.ZS) ·
+  [Chainalysis, Sub-Saharan Africa crypto
+  adoption](https://www.chainalysis.com/blog/subsaharan-africa-crypto-adoption-2025/) · [Financial
+  Stability Board](https://www.fsb.org/). Figures are the most recent published at the time of
+  writing; see [the bibliography](/primer/bibliography) for full references and retrieval dates.
+</span>

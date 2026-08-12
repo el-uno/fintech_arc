@@ -16,7 +16,7 @@ Arc models the backend of a payments business that moves money between Europe an
 
 ## Status
 
-Arc is being built in phases. **Phases 0–5 are complete.** Everything below marked _planned_ is designed in [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md) but not yet implemented — this section is kept honest as the build progresses.
+Arc is being built in phases. **Phases 0–6 are complete.** Everything below marked _planned_ is designed in [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md) but not yet implemented — this section is kept honest as the build progresses.
 
 | Phase | Scope                                                                     | Status      |
 | ----- | ------------------------------------------------------------------------- | ----------- |
@@ -26,7 +26,7 @@ Arc is being built in phases. **Phases 0–5 are complete.** Everything below ma
 | 3     | Chain-agnostic adapter + deterministic simulator                          | ✅ Complete |
 | 4     | Money movement: rails, quotes, the settlement saga, reversals             | ✅ Complete |
 | 5     | Risk & compliance: KYC/KYB, sanctions, AML, review queues                 | ✅ Complete |
-| 6     | Platform: auth, gateway, webhooks, observability, secrets                 | Planned     |
+| 6     | Platform: auth, gateway, webhooks, observability, secrets                 | ✅ Complete |
 | 7     | Partner platform, sandbox, Last Mile API, SDKs                            | Planned     |
 | 8     | Reconciliation, reporting, runbooks                                       | Planned     |
 | 9     | Documentation and public polish                                           | Planned     |
@@ -187,7 +187,8 @@ services/
 ├── ledger/        Double-entry posting engine, balances — 37 tests
 ├── product/       Onboarding, tiers, virtual accounts — 24 tests
 ├── movement/      Rails, quotes, settlement saga — 42 tests
-└── risk/          KYC/KYB, sanctions, AML rules, review queues — 47 tests
+├── risk/          KYC/KYB, sanctions, AML rules, review queues — 47 tests
+└── platform/      Auth, gateway, webhooks, secrets, tracing — 52 tests
 prisma/            Ledger tables with balance/append-only constraints, outbox
 ops/               Postgres + Redis
 docs/architecture/ledger.md   The ledger model, worked corridor example
@@ -199,6 +200,8 @@ Two guarantees are already pinned by tests:
 **Value is conserved under allocation.** Splitting any amount across any weights always sums back to exactly the original — the property that stops a cent appearing or vanishing when a transfer is broken into fees.
 
 **Delivery is at-least-once, processing is effectively-once.** The outbox stages events in the same transaction as the state change. Handlers that already succeeded are never re-run on retry, and a poison event is parked for review rather than dropped or left blocking the queue.
+
+**Requests are signed, idempotent and rate-limited.** A token says who you are; an HMAC signature says the body was not altered and is not a replay. Retrying a payout returns the original response — reusing a key with a different body is a conflict, not a cache hit. See [platform and security](docs/architecture/security.md).
 
 **Compliance blocks money movement, it does not observe it.** A sanctions hit or a structuring pattern halts the transfer before a single journal is posted, opens a case with an SLA, and records a four-eyes audit trail. Asserted against the real saga, not a stub. See [compliance](docs/architecture/compliance.md).
 

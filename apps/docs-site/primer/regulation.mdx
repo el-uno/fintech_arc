@@ -1,0 +1,171 @@
+---
+title: 'The regulatory picture'
+description: "GENIUS Act rulemaking, MiCA's transitional cliff, Kenya's VASP Act and Nigeria's ISA 2025 — what a corridor operator is actually subject to."
+icon: 'gavel'
+---
+
+<span className="arc-eyebrow">The corridor problem · 4 of 5</span>
+
+<Warning>
+  **Not legal advice, and time-sensitive.** This page reflects the picture as of **August 2026** and
+  rulemaking is live in several of these jurisdictions. Arc holds no licence anywhere and is not
+  authorised to do anything. Treat this as orientation for reading the architecture, then read the
+  primary sources.
+</Warning>
+
+A corridor operator is not regulated once. It is regulated at every point it touches: where it takes money in, where the stablecoin is issued, where it pays money out, and by whoever supervises the correspondent relationships in between. Four regimes matter for EU↔Africa, and they are converging on the same shape from very different starting points.
+
+---
+
+## United States — the GENIUS Act
+
+The **Guiding and Establishing National Innovation for U.S. Stablecoins Act** ([S.1582, 119th Congress](https://www.congress.gov/bill/119th-congress/senate-bill/1582/text)) was enacted in July 2025 and is the first comprehensive federal framework for payment stablecoins. Because roughly 99% of stablecoin supply is dollar-denominated, this is the regime that shapes the asset almost every corridor settles in — whether or not the corridor touches the US.
+
+The statute itself is short on operational detail and long on delegation, so most of 2026 has been about rulemaking. Tracking it matters more than reading the Act.
+
+<Steps>
+  <Step title="Treasury ANPRM — September 2025">
+    An advance notice of proposed rulemaking soliciting comment on implementation questions across
+    the whole framework. [Federal
+    Register](https://www.federalregister.gov/documents/2025/09/19/2025-18226/genius-act-implementation)
+  </Step>
+  <Step title="OCC proposed rules — March 2026">
+    Rules for issuance of payment stablecoins by entities under OCC jurisdiction, published 2 March
+    2026 with comments due 1 May 2026. [OCC Bulletin
+    2026-3](https://www.occ.gov/news-issuances/bulletins/2026/bulletin-2026-3.html) · [Federal
+    Register](https://www.federalregister.gov/documents/2026/03/02/2026-04089/implementing-the-guiding-and-establishing-national-innovation-for-us-stablecoins-act-for-the)
+  </Step>
+  <Step title="FinCEN and OFAC joint proposed rule — April 2026">
+    Implementing the Act's AML and sanctions-compliance programme requirements for issuers.
+    [Treasury](https://home.treasury.gov/news/press-releases/sb0435)
+  </Step>
+  <Step title="Treasury state-regime principles — April 2026">
+    Broad-based principles for deciding when a state regulatory regime is "substantially similar" to
+    the federal one, published 3 April 2026 with comments due 2 June 2026. [Federal
+    Register](https://www.federalregister.gov/documents/2026/04/03/2026-06489/genius-act-broad-based-principles-for-determining-whether-a-state-level-regulatory-regime-is)
+  </Step>
+</Steps>
+
+The structural feature worth internalising: an issuer may operate under a qualifying **state** regime until its outstanding stablecoins exceed **$10 billion**, at which point — absent a waiver — it must transition into the federal regime or stop issuing. That threshold is the hinge of the whole design. It permits genuine experimentation at small scale while pulling anything systemically relevant under federal supervision.
+
+<div className="arc-claim">
+  For a payments business, the practical consequence is narrow and important: **which stablecoin you
+  settle in is now a regulatory decision, not just a liquidity one.** The issuer's regime, reserve
+  rules, and redemption obligations become part of your own risk surface.
+</div>
+
+---
+
+## European Union — MiCA
+
+[Regulation (EU) 2023/1114](https://eur-lex.europa.eu/eli/reg/2023/1114/oj) became fully applicable on 30 December 2024. It splits stablecoins into two categories, and the distinction is not cosmetic.
+
+|                | E-money tokens (Title IV)                                             | Asset-referenced tokens (Title III) |
+| -------------- | --------------------------------------------------------------------- | ----------------------------------- |
+| References     | A single official currency                                            | A basket, commodities, or a mix     |
+| Issuer must be | A credit institution or an authorised EMI under Directive 2009/110/EC | An authorised ART issuer            |
+| Redemption     | At par, at any time, at the holder's request                          | More complex, and weaker            |
+| Practical read | The category a EUR or USD stablecoin used in payments falls into      | Everything else                     |
+
+**EMTs face the strictest reserve and redemption rules**, and that is deliberate: MiCA treats a single-currency payment token as e-money and regulates it accordingly rather than inventing a lighter category for it.
+
+**1 July 2026 was the end of the EU-wide transitional period.** Entities providing crypto-asset services in the EU without MiCA authorisation can no longer rely on grandfathering arrangements. In practice this is the date the EU side of a corridor stopped being a grey area.
+
+<Note>
+  Arc's EUR leg is the leg that would sit under this regime. The architecture reflects it in one
+  specific way: the [tier policy](/architecture/compliance#tiers-and-limits) treats verification
+  level as a hard gate on what a customer may do, with limits expressed in a single reference
+  currency, because a limits regime that varies per corridor is a limits regime nobody can audit.
+</Note>
+
+---
+
+## Kenya — the Virtual Asset Service Providers Act, 2025
+
+Kenya moved from having essentially no framework to having a fairly complete one in under a year.
+
+The [VASP Act, 2025](https://new.kenyalaw.org/akn/ke/act/2025/20/eng@2025-11-04) received presidential assent on 15 October 2025, and the implementing regulations were gazetted in July 2026, completing the framework.
+
+Its notable feature is a **dual-regulator architecture**:
+
+<Columns cols={2}>
+  <div>
+    **Central Bank of Kenya**
+
+    Custodial wallet providers, virtual asset payment processors, and stablecoin issuance.
+
+  </div>
+  <div>
+    **Capital Markets Authority**
+
+    Exchanges and trading platforms.
+
+  </div>
+</Columns>
+
+The split follows function rather than technology, which is the right instinct: a payment processor and a trading venue pose different risks and belong with different supervisors. For a corridor operator paying out to M-Pesa, the CBK side is the one that binds — Arc's KES payout leg is a payment-processing activity, not a trading one.
+
+---
+
+## Nigeria — ISA 2025 and after
+
+The **Investments and Securities Act 2025** gives Nigeria's SEC express jurisdiction over virtual and digital asset exchanges, custodians, and VASPs, replacing a period in which the central bank and the SEC had visibly different postures on the same activity. The Act includes enforcement machinery, notably a "National Confiscation Wallet" for seized assets.
+
+Alongside it, the **Nigeria Tax Administration Act 2025** confirms a 10% capital gains charge on the disposal of digital assets, and clarifies that not every virtual asset is necessarily an SEC-regulated security.
+
+<div className="arc-gap">
+  Nigeria is also the jurisdiction where the gap between regulation and behaviour is widest.
+  Chainalysis puts Nigerian on-chain value received at roughly **$92bn** for the year to June 2025 —
+  the largest in the region — driven substantially by inflation and foreign-currency access rather
+  than by anything the framework contemplates. A corridor operator has to build for the flows that
+  exist, under the rules as written. Those are not the same specification.
+</div>
+
+---
+
+## The pattern underneath
+
+Read the four together and the convergence is obvious. Every regime is arriving at the same four requirements:
+
+<CardGroup cols={2}>
+  <Card title="Reserve quality and segregation" icon="vault">
+    Short-dated, high-quality, bankruptcy-remote from the issuer. The maturity transformation is
+    being legislated away.
+  </Card>
+  <Card title="Redemption at par, on demand" icon="right-left">
+    The promise made explicit and enforceable, rather than left to the terms of service.
+  </Card>
+  <Card title="AML and sanctions as a programme" icon="shield">
+    Not a screening step bolted on. A programme with governance, testing, and records — which is why
+    Arc treats compliance as a hard pre-condition rather than a side channel.
+  </Card>
+  <Card title="Licensed entities at both ends" icon="id-card">
+    The permissionless middle leg does not make the endpoints permissionless. Someone regulated
+    takes the money in and someone regulated pays it out.
+  </Card>
+</CardGroup>
+
+<div className="arc-claim">
+  That last point is the one most often missed when people describe stablecoin corridors as
+  disintermediating. **The chain replaces the correspondent banks in the middle. It does not replace
+  the licensed entity at either end.** Arc's architecture encodes exactly this shape: an unverified
+  account can hold a virtual account and receive funds but cannot send, and no transfer leaves the
+  compliance gate without a recorded decision.
+</div>
+
+<Card title="Next: the case against" icon="scale-unbalanced" href="/primer/the-case-against">
+  The BIS argument that stablecoins fail the three tests of sound money — taken seriously.
+</Card>
+
+---
+
+<span className="arc-cite">
+  Sources: [S.1582 GENIUS Act](https://www.congress.gov/bill/119th-congress/senate-bill/1582/text) ·
+  [OCC Bulletin 2026-3](https://www.occ.gov/news-issuances/bulletins/2026/bulletin-2026-3.html) ·
+  [Treasury, illicit-finance proposed rule](https://home.treasury.gov/news/press-releases/sb0435) ·
+  [Federal Register, state-regime
+  principles](https://www.federalregister.gov/documents/2026/04/03/2026-06489/genius-act-broad-based-principles-for-determining-whether-a-state-level-regulatory-regime-is)
+  · [Regulation (EU) 2023/1114 (MiCA)](https://eur-lex.europa.eu/eli/reg/2023/1114/oj) · [Kenya VASP
+  Act 2025](https://new.kenyalaw.org/akn/ke/act/2025/20/eng@2025-11-04) · Nigeria ISA 2025. Full
+  references in [the bibliography](/primer/bibliography).
+</span>

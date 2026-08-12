@@ -1,0 +1,137 @@
+---
+title: 'Reading paths'
+description: 'Four routes through this site, depending on whether you came for the domain, the code, the stories, or an interview.'
+icon: 'compass'
+---
+
+<span className="arc-eyebrow">Orientation · pick one</span>
+
+This site has about forty pages across four tabs. Reading it front to back works, but most people want one of these four routes.
+
+---
+
+<Tabs>
+  <Tab title="The domain">
+    <span className="arc-eyebrow arc-eyebrow--dim">~50 minutes · no code</span>
+
+    You want to understand how stablecoin cross-border payments work, well enough to evaluate a claim about them. This path never opens a source file.
+
+    <Steps>
+      <Step title="Why corridors cost so much">
+        Correspondent banking, pre-funding, and where the 8.78% actually goes. [Read →](/primer/why-corridors-cost-so-much)
+      </Step>
+      <Step title="How stablecoins work">
+        Issuance, redemption, reserves, and the difference between a peg and a promise. [Read →](/primer/how-stablecoins-work)
+      </Step>
+      <Step title="Settlement and finality">
+        Why "instant" is a marketing word and finality is a probability curve. [Read →](/primer/settlement-and-finality)
+      </Step>
+      <Step title="The 2026 regulatory picture">
+        GENIUS Act rulemaking, MiCA's transitional cliff, Kenya's VASP Act, Nigeria's ISA. [Read →](/primer/regulation)
+      </Step>
+      <Step title="The case against">
+        The BIS argument that stablecoins fail the three tests of sound money — taken seriously, not strawmanned. [Read →](/primer/the-case-against)
+      </Step>
+    </Steps>
+
+    Finish at [the bibliography](/primer/bibliography) if you want the primary sources.
+
+  </Tab>
+
+  <Tab title="The system">
+    <span className="arc-eyebrow arc-eyebrow--dim">~90 minutes · code and diagrams</span>
+
+    You want to read the architecture. Order matters here: the ledger has to exist before money can move.
+
+    <Steps>
+      <Step title="Architecture overview">
+        Six bounded contexts, one deployable, an event bus between them. [Read →](/architecture/overview)
+      </Step>
+      <Step title="Why money is never a float">
+        The single decision the rest of the system is built on. [Read →](/architecture/money)
+      </Step>
+      <Step title="The ledger">
+        Chart of accounts, the balance rule, the worked EUR→KES example. The core. [Read →](/architecture/ledger)
+      </Step>
+      <Step title="Contexts and events">
+        The outbox, at-least-once delivery, and how boundaries are mechanically enforced. [Read →](/architecture/contexts-and-events)
+      </Step>
+      <Step title="The chain layer">
+        Chain-agnostic driver, deterministic simulator, reorg rollback. [Read →](/architecture/chain-layer)
+      </Step>
+      <Step title="The settlement saga">
+        Five steps, five compensations, and why order matters. [Read →](/architecture/settlement-saga)
+      </Step>
+      <Step title="What the tests prove">
+        Property-based, mutation-checked, chaos-injected. The proof layer. [Read →](/architecture/testing)
+      </Step>
+    </Steps>
+
+    Then walk a [flow](/flows/consumer-remittance) end to end to see it assembled.
+
+  </Tab>
+
+  <Tab title="The stories">
+    <span className="arc-eyebrow arc-eyebrow--dim">~40 minutes · start anywhere</span>
+
+    Seven narratives. Each opens on a symptom, walks the diagnosis, and lands on the specific piece of Arc that prevents it. They are self-contained and can be read in any order — but if you read only one:
+
+    <Card title="The journal that balanced and lied" icon="triangle-exclamation" href="/stories/the-journal-that-balanced-and-lied">
+      A mutation that broke the audit trail and passed all sixteen tests. The best argument on this site for why balance is necessary but not sufficient.
+    </Card>
+
+    The rest, roughly by difficulty:
+
+    - [The cent that vanished](/stories/the-cent-that-vanished) — rounding residuals
+    - [The payout that paid twice](/stories/the-payout-that-paid-twice) — idempotency under timeout
+    - [The cut-off that cost a day](/stories/the-cutoff-that-cost-a-day) — batch rails and compounding delay
+    - [The fastest chain that settled last](/stories/the-fastest-chain-that-settled-last) — block time is not finality
+    - [The quote that aged](/stories/the-quote-that-aged) — stale rates as unhedged loss
+    - [The boundary that wasn't](/stories/the-boundary-that-wasnt) — an architecture rule that silently didn't hold
+
+  </Tab>
+
+  <Tab title="Interview prep">
+    <span className="arc-eyebrow arc-eyebrow--dim">~2 hours · active recall</span>
+
+    You have a payments, ledger, or infrastructure interview. Do this in order and answer out loud before reading the answer.
+
+    <Steps>
+      <Step title="Read the ledger and the saga">
+        You need [the ledger](/architecture/ledger) and [the saga](/architecture/settlement-saga) in your head first. Everything else builds on them.
+      </Step>
+      <Step title="Work the question banks">
+        [Ledger](/practice/ledger) · [Distributed systems](/practice/distributed-systems) · [Chain and settlement](/practice/chain-and-settlement) · [Compliance](/practice/compliance)
+      </Step>
+      <Step title="Self-check">
+        [Ledger quiz](/practice/quiz-ledger) · [Settlement quiz](/practice/quiz-settlement)
+      </Step>
+      <Step title="Steal the stories">
+        A concrete failure narrative beats an abstract answer in every interview. [The stories](/stories) are there to be retold.
+      </Step>
+    </Steps>
+
+    <Note>
+      The strongest answers on this site are the ones about what *didn't* work — the mutation that passed, the boundary rule that didn't fire. Interviewers remember those.
+    </Note>
+
+  </Tab>
+</Tabs>
+
+---
+
+## Conventions used throughout
+
+<div className="arc-claim">
+  A teal block is a **load-bearing claim the code enforces** — there is a test or a database
+  constraint behind it.
+</div>
+
+<div className="arc-gap">
+  An amber block is a **known gap**: something modelled but not wired, or a limitation accepted on
+  purpose. These are stated rather than hidden.
+</div>
+
+Account codes appear as structured strings — `asset.float.bank.EUR`, `liability.customer.va_1.KES` — because a journal should be legible in a log or a `psql` session without joining anything.
+
+All monetary figures are integer minor units. `10000n` is €100.00. There are no floats anywhere near money, and [there is a lint rule that makes sure](/architecture/money).

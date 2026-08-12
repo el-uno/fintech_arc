@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 28" width="96" height="28" role="img" aria-label="Arc">
+  <path d="M4 20.5 C 4 10.5, 22 10.5, 22 20.5" fill="none" stroke="#2DD4BF" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="4" cy="20.5" r="2.4" fill="#2DD4BF"/>
+  <circle cx="22" cy="20.5" r="2.4" fill="#F59E0B"/>
+  <text x="33" y="21" font-family="Inter, system-ui, sans-serif" font-size="18" font-weight="650" letter-spacing="-0.8" fill="#E6EDF3">Arc</text>
+</svg>

@@ -1,0 +1,149 @@
+---
+title: 'Settlement and finality'
+description: "Why 'instant' is a marketing word, why the fastest chain can settle last, and how a payments business chooses a point on the probability curve."
+icon: 'clock'
+---
+
+<span className="arc-eyebrow">The corridor problem · 3 of 5</span>
+
+"Settles in seconds" is the claim the entire sector is sold on. It is true in the way that "the plane lands in six hours" is true — accurate about the flight, silent about the airport.
+
+Two things have to be pulled apart before the claim means anything: **settlement** and **finality**.
+
+---
+
+## Settlement is not finality
+
+<Columns cols={2}>
+  <div>
+    **Settlement** is the discharge of an obligation. I owed you money; now I do not. In a
+    traditional system this is the moment a central bank's books are updated.
+  </div>
+  <div>
+    **Finality** is the point after which that discharge cannot be undone. It is a legal concept
+    before it is a technical one, and the two do not always agree.
+  </div>
+</Columns>
+
+In a traditional RTGS system — TARGET2, Fedwire — finality is **deterministic and legally defined**. A payment settles at a specific instant, statute says it is irrevocable, and that is the end of it. There is no probability involved.
+
+On a public blockchain, finality is **probabilistic**. A transaction included in a block might be reorganised out of the chain if a competing fork wins. The probability of that decays as blocks accumulate on top, approaching but never quite reaching zero.
+
+<div className="arc-claim">
+  A payments business does not "wait for finality". It **chooses a confirmation depth** at which the
+  residual reorg probability is acceptable relative to the value at risk — and that choice is a
+  business decision priced into the product, not a technical constant.
+</div>
+
+Ethereum's move to proof-of-stake introduced _economic_ finality via checkpointing, which is stronger — reverting a finalised checkpoint requires an attacker to burn a large fraction of staked ETH. It is still not a statute. It is a very expensive disincentive, which is a different kind of guarantee than TARGET2 offers, and worth being precise about when someone claims the two are equivalent.
+
+---
+
+## The counter-intuitive part: block time is not speed
+
+Here is the table that makes the point, and it is the reason Arc's chain layer exists at all.
+
+| Chain    | Block time | Confirmations to finality | Actual settlement window |
+| -------- | ---------- | ------------------------- | ------------------------ |
+| Solana   | 400 ms     | 32                        | ~13 s                    |
+| Base     | 2 s        | 10                        | 20 s                     |
+| Tron     | 3 s        | 19                        | 57 s                     |
+| Ethereum | 12 s       | 12                        | 144 s                    |
+| Polygon  | 2 s        | 128                       | **256 s**                |
+
+**Polygon has blocks six times faster than Ethereum and settles nearly twice as slowly.** Fast blocks that are individually less secure require more of them to reach the same confidence. Optimising for block time alone gets this exactly backwards.
+
+<Note>
+Arc models each of these five chains with its own block time, finality depth, fee model, reorg depth distribution, and failure rates — and then [selects a chain per transfer](/architecture/chain-layer#chain-selection) by scoring settlement time against fee, weighted by a speed preference. That is what "chain-agnostic" means concretely: the corridor picks per transfer rather than being wired to one chain.
+
+The full story is [The fastest chain that settled last](/stories/the-fastest-chain-that-settled-last).
+
+</Note>
+
+---
+
+## Failed is not dropped
+
+A distinction that looks pedantic until you have to compensate for it.
+
+<Columns cols={2}>
+  <div>
+    **Failed**
+
+    The transaction was mined into a block, executed, and reverted. It consumed gas. The fee is spent and gone.
+
+  </div>
+  <div>
+    **Dropped**
+
+    The transaction never made it into a block — evicted from the mempool, underpriced, or replaced. It cost nothing.
+
+  </div>
+</Columns>
+
+<div className="arc-claim">
+  These require different compensation. Reversing a failed transaction must **not** reverse the gas
+  expense, because the gas was really spent — pretending otherwise misstates the expense and
+  produces a balanced ledger that lies about reality. Arc's saga deliberately does not track or
+  reverse the network-fee journal for exactly this reason.
+</div>
+
+Arc's chain simulator models both as distinct terminal states (`failed` and `dropped`), alongside `pending → included → confirmed`, precisely so the saga has to handle the difference rather than collapsing them into "error".
+
+---
+
+## Reorgs are not hypothetical
+
+A reorganisation happens when the chain discards blocks it had previously built on and adopts a competing branch. Transactions in the discarded blocks return to the mempool — they are _un-mined_, and a transaction you had counted as included is suddenly pending again.
+
+For a payments business this is the nastiest failure mode available, because it is the one where **you already told the customer it worked**.
+
+Arc's simulator produces reorgs two ways, and the second matters more:
+
+<Steps>
+  <Step title="Probabilistically, during block production">
+    Each chain has its own reorg rate and maximum depth, drawn from a seeded PRNG. A seeded run
+    reproduces the same reorg sequence every time — which is what makes the whole determinism claim
+    hold.
+  </Step>
+  <Step title="Deterministically, via forceReorg(depth)">
+    The chaos suite needs a reorg at a *precise* moment. Tuning a probability until a test happens
+    to reorg is flaky and proves nothing, so an explicit trigger exists alongside the probabilistic
+    one.
+  </Step>
+</Steps>
+
+The `reorg` event carries `revertedTransactions`, so a consumer knows exactly what to undo without diffing state itself. Rollback clears each affected transaction's block height, resets its status to `pending`, and pushes it to the front of the mempool to be re-mined promptly.
+
+---
+
+## What this means for the customer promise
+
+A corridor product has to make a promise about time, and there are only three honest shapes for it.
+
+| Promise                                             | What it requires                                                                         | Cost                                                                    |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| "Funds arrive when the chain finalises"             | Nothing. Pass the latency through                                                        | Slowest, cheapest, hardest to sell                                      |
+| "Funds arrive in ~20s, we pick the chain"           | Chain selection per transfer, accepting that the cheapest chain is often not the fastest | Moderate                                                                |
+| "Funds arrive instantly, we credit before finality" | The provider takes reorg risk onto its own balance sheet                                 | Fastest, and it is a **credit product** whether or not it is called one |
+
+The third is what most consumer-facing "instant" products actually are, and it deserves to be named. Crediting a beneficiary before finality means the provider is lending against an unsettled position. That can be perfectly sound — priced, bounded, reserved against — but it is a lending decision, and a system that does not model it as one will eventually be surprised by it.
+
+<div className="arc-gap">
+  Arc takes the second shape. The `settle` step broadcasts, advances the chain, then **re-reads the
+  transaction and requires `final`** before proceeding. Checking `final` rather than "no error was
+  thrown" is the difference between confirming settlement and merely confirming submission — and it
+  is a distinction that is easy to get wrong in code that looks correct.
+</div>
+
+<Card title="Next: the 2026 regulatory picture" icon="gavel" href="/primer/regulation">
+  GENIUS Act rulemaking, MiCA's transitional cliff, Kenya's VASP Act, and Nigeria's ISA 2025.
+</Card>
+
+---
+
+<span className="arc-cite">
+  Chain characteristics above are Arc's simulation parameters, chosen to reflect published finality
+  guidance for each network at the time of writing. See [the chain layer](/architecture/chain-layer)
+  for the source of truth and [the bibliography](/primer/bibliography) for references.
+</span>

@@ -24,6 +24,9 @@
     },
     {
       "path": "./services/risk"
+    },
+    {
+      "path": "./services/platform"
     }
   ]
 }

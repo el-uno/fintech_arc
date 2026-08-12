@@ -1,0 +1,240 @@
+/* ============================================================================
+   Arc — "terminal corridor"
+
+   Dark-first, technical. Charcoal ground, one electric-teal accent, amber for
+   warnings and money-at-risk. Mono is used structurally — eyebrows, account
+   codes, ledger figures — never decoratively. No glow, no gradients on text.
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+:root {
+  --arc-teal: #2dd4bf;
+  --arc-teal-deep: #14b8a6;
+  --arc-amber: #f59e0b;
+  --arc-rose: #fb7185;
+
+  --arc-ground: #0d1117;
+  --arc-raised: #151b23;
+  --arc-sunken: #090d13;
+  --arc-hairline: #232b36;
+
+  --arc-ink: #e6edf3;
+  --arc-ink-dim: #9aa7b4;
+  --arc-ink-faint: #6b7785;
+
+  --arc-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.light {
+  --arc-ground: #ffffff;
+  --arc-raised: #f7f9fa;
+  --arc-sunken: #eef2f5;
+  --arc-hairline: #dfe5ea;
+
+  --arc-ink: #0d1117;
+  --arc-ink-dim: #4a5561;
+  --arc-ink-faint: #78838f;
+}
+
+/* ---------------------------------------------------------------- typography */
+
+body {
+  font-feature-settings: 'cv05', 'ss01', 'tnum';
+  letter-spacing: -0.006em;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  letter-spacing: -0.024em;
+  font-weight: 650;
+}
+
+h1 {
+  letter-spacing: -0.032em;
+}
+
+/* Section headings get a mono tick in the gutter — the "terminal" cue. */
+h2::before {
+  content: '▚ ';
+  color: var(--arc-teal);
+  font-family: var(--arc-mono);
+  font-weight: 500;
+  opacity: 0.55;
+}
+
+/* Numbers in tables line up. Ledger figures are unreadable otherwise. */
+table {
+  font-variant-numeric: tabular-nums;
+}
+
+table td:not(:first-child),
+table th:not(:first-child) {
+  text-align: right;
+  font-family: var(--arc-mono);
+  font-size: 0.86em;
+}
+
+table td:first-child {
+  font-family: var(--arc-mono);
+  font-size: 0.86em;
+}
+
+/* ---------------------------------------------------------------------- code */
+
+code,
+pre,
+kbd {
+  font-family: var(--arc-mono);
+  font-feature-settings: 'liga' 0;
+}
+
+:not(pre) > code {
+  border: 1px solid var(--arc-hairline);
+  border-radius: 4px;
+  background: var(--arc-sunken);
+  color: var(--arc-teal);
+  padding: 0.1em 0.36em;
+  font-size: 0.86em;
+  font-weight: 500;
+}
+
+pre {
+  border: 1px solid var(--arc-hairline);
+  border-radius: 6px;
+  box-shadow: none;
+}
+
+/* ------------------------------------------------------------------ eyebrows */
+
+.arc-eyebrow {
+  display: block;
+  font-family: var(--arc-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--arc-teal);
+  margin-bottom: 0.6rem;
+}
+
+.arc-eyebrow--amber {
+  color: var(--arc-amber);
+}
+
+.arc-eyebrow--dim {
+  color: var(--arc-ink-faint);
+}
+
+/* --------------------------------------------------------------- stat strips */
+
+.arc-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1px;
+  background: var(--arc-hairline);
+  border: 1px solid var(--arc-hairline);
+  border-radius: 6px;
+  overflow: hidden;
+  margin: 1.75rem 0;
+}
+
+.arc-stat {
+  background: var(--arc-raised);
+  padding: 1rem 1.1rem;
+}
+
+.arc-stat__value {
+  display: block;
+  font-family: var(--arc-mono);
+  font-size: 1.45rem;
+  font-weight: 600;
+  line-height: 1.1;
+  color: var(--arc-teal);
+  font-variant-numeric: tabular-nums;
+}
+
+.arc-stat__label {
+  display: block;
+  margin-top: 0.4rem;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: var(--arc-ink-dim);
+}
+
+.arc-stat__source {
+  display: block;
+  margin-top: 0.35rem;
+  font-family: var(--arc-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
+  color: var(--arc-ink-faint);
+}
+
+/* -------------------------------------------------------------- claim blocks */
+
+/* A load-bearing claim the code actually enforces. Teal = proven by a test. */
+.arc-claim {
+  border-left: 2px solid var(--arc-teal);
+  background: linear-gradient(90deg, rgba(45, 212, 191, 0.06), transparent 70%);
+  padding: 0.9rem 1.1rem;
+  margin: 1.6rem 0;
+  border-radius: 0 5px 5px 0;
+}
+
+/* A limitation stated plainly rather than papered over. Amber = known gap. */
+.arc-gap {
+  border-left: 2px solid var(--arc-amber);
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.06), transparent 70%);
+  padding: 0.9rem 1.1rem;
+  margin: 1.6rem 0;
+  border-radius: 0 5px 5px 0;
+}
+
+.arc-claim p:last-child,
+.arc-gap p:last-child {
+  margin-bottom: 0;
+}
+
+/* ------------------------------------------------------------------- stories */
+
+/* The opening symptom line of an engineering story. */
+.arc-symptom {
+  font-size: 1.08rem;
+  line-height: 1.6;
+  color: var(--arc-ink);
+  border: 1px solid var(--arc-hairline);
+  border-radius: 6px;
+  background: var(--arc-sunken);
+  padding: 1.15rem 1.3rem;
+  margin: 1.5rem 0 2rem;
+}
+
+.arc-symptom::before {
+  content: 'SYMPTOM';
+  display: block;
+  font-family: var(--arc-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.16em;
+  color: var(--arc-rose);
+  margin-bottom: 0.55rem;
+}
+
+/* ---------------------------------------------------------------- citations */
+
+.arc-cite {
+  font-size: 0.82rem;
+  color: var(--arc-ink-faint);
+  font-family: var(--arc-mono);
+}
+
+/* ------------------------------------------------------------------ mermaid */
+
+.mermaid {
+  background: var(--arc-sunken);
+  border: 1px solid var(--arc-hairline);
+  border-radius: 6px;
+  padding: 1rem;
+}
