@@ -9,4 +9,5 @@ coverage/
 prisma/generated/
 
 # Private working notes, not published
+apps/docs-site
 explanations.md
