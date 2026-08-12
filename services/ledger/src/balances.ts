@@ -1,15 +1,6 @@
 import { Money, type CurrencyCode } from '@arc/money';
 import { entrySign, type AccountType, type Direction } from './accounts.js';
 
-/**
- * A balance is *derived*, never stored as a mutable number.
- *
- * The entries are the truth; a balance is a fold over them. That is what makes
- * the ledger reconstructible — replaying every entry from the beginning must
- * reproduce the same figures, and if it does not, the entries are right and the
- * cached balance is wrong.
- */
-
 export interface PostedEntry {
   readonly accountCode: string;
   readonly accountType: AccountType;
@@ -17,7 +8,6 @@ export interface PostedEntry {
   readonly amount: Money;
 }
 
-/** A claim on funds that are posted but not yet spendable. */
 export interface Hold {
   readonly accountCode: string;
   readonly amount: Money;
@@ -27,15 +17,11 @@ export interface Hold {
 export interface AccountBalance {
   readonly accountCode: string;
   readonly currency: CurrencyCode;
-  /** The sum of all posted entries, signed by the account's normal balance. */
   readonly posted: Money;
-  /** Committed to in-flight work: quoted transfers, pending payouts. */
   readonly reserved: Money;
-  /** What can actually be spent right now: posted − reserved. */
   readonly available: Money;
 }
 
-/** Fold a single account's entries into its posted balance. */
 export function projectPosted(
   accountCode: string,
   accountType: AccountType,
@@ -81,13 +67,6 @@ export function projectBalance(
   };
 }
 
-/**
- * The solvency question, asked of the whole ledger.
- *
- * Across every account, in every currency, the signed sum must be zero — assets
- * on one side, liabilities and equity on the other. If this is ever non-zero,
- * value was created or destroyed, and nothing downstream can be trusted.
- */
 export function trialBalance(
   entries: readonly PostedEntry[],
 ): Map<CurrencyCode, { debits: Money; credits: Money; difference: Money }> {

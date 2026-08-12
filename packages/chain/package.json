@@ -1,5 +1,5 @@
 {
-  "name": "@arc/ledger",
+  "name": "@arc/chain",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -16,8 +16,6 @@
     "typecheck": "tsc -b"
   },
   "dependencies": {
-    "@arc/money": "workspace:*",
-    "@arc/contracts": "workspace:*",
-    "@arc/bus": "workspace:*"
+    "@arc/money": "workspace:*"
   }
 }

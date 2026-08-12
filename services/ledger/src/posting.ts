@@ -50,39 +50,21 @@ export interface PostedJournal {
   readonly entries: readonly PostedEntry[];
 }
 
-/**
- * Persistence for the ledger. `append` must be atomic: either every entry in the
- * journal lands or none does. A partially written journal is an unbalanced
- * ledger, which is the one state this system must never reach.
- */
 export interface LedgerStore {
   getAccount(code: string): Promise<LedgerAccount | undefined>;
   createAccount(account: Omit<LedgerAccount, 'id'>): Promise<LedgerAccount>;
   entriesFor(accountCodes: readonly string[]): Promise<PostedEntry[]>;
   activeHoldsFor(accountCodes: readonly string[]): Promise<Hold[]>;
+  /** Must be atomic: every entry lands or none does. */
   append(journal: PostedJournal): Promise<PostedJournal>;
 }
 
-/**
- * The posting engine.
- *
- * Balance-or-reject: a journal is validated in full before anything is written,
- * and a rejection leaves no trace. There is no path that writes some entries and
- * then discovers a problem.
- *
- * The checks, in order — cheapest and most fundamental first:
- *   1. the journal balances, per currency;
- *   2. every account exists and matches the entry's currency;
- *   3. no account ends below its overdraft floor.
- */
 export class PostingEngine {
   constructor(private readonly store: LedgerStore) {}
 
   async post(draft: JournalDraft): Promise<PostedJournal> {
-    // 1. Balance. Pure, no I/O — a malformed journal never reaches the database.
     assertBalanced(draft.entries);
 
-    // 2. Resolve accounts and check currencies.
     const accounts = await this.resolveAccounts(draft.entries);
 
     const entries: PostedEntry[] = draft.entries.map((entry) => {
@@ -95,7 +77,6 @@ export class PostingEngine {
       };
     });
 
-    // 3. Overdraft. Compute the resulting balance of every touched account.
     await this.assertNoOverdraft(entries, accounts);
 
     const journal: PostedJournal = {
@@ -160,12 +141,6 @@ export class PostingEngine {
   }
 }
 
-/**
- * In-memory store. Correct semantics, no durability — used by the fast test suite
- * and by scenario replays. The Prisma-backed store enforces the same rules again
- * at the database level, because an invariant this important should not depend on
- * every caller going through this class.
- */
 export class InMemoryLedgerStore implements LedgerStore {
   private readonly accounts = new Map<string, LedgerAccount>();
   private readonly journals: PostedJournal[] = [];
@@ -199,7 +174,6 @@ export class InMemoryLedgerStore implements LedgerStore {
     return journal;
   }
 
-  /** Every entry ever posted, for trial balance and replay checks. */
   allEntries(): PostedEntry[] {
     return this.journals.flatMap((j) => j.entries);
   }

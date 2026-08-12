@@ -43,3 +43,10 @@ export {
   type LedgerStore,
   type PostedJournal,
 } from './posting.js';
+
+export {
+  ensureAccount,
+  provisionPlatformAccounts,
+  registerLedgerProvisioning,
+  type ProvisionOptions,
+} from './provisioning.js';

@@ -48,6 +48,12 @@ importers:
         specifier: workspace:*
         version: link:../contracts
 
+  packages/chain:
+    dependencies:
+      '@arc/money':
+        specifier: workspace:*
+        version: link:../money
+
   packages/contracts:
     dependencies:
       zod:
@@ -58,6 +64,21 @@ importers:
 
   services/ledger:
     dependencies:
+      '@arc/bus':
+        specifier: workspace:*
+        version: link:../../packages/bus
+      '@arc/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@arc/money':
+        specifier: workspace:*
+        version: link:../../packages/money
+
+  services/product:
+    dependencies:
+      '@arc/bus':
+        specifier: workspace:*
+        version: link:../../packages/bus
       '@arc/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts

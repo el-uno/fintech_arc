@@ -83,6 +83,39 @@ export default tseslint.config(
   },
 
   {
+    // Bounded-context isolation, second layer.
+    //
+    // dependency-cruiser catches relative cross-service imports, but a
+    // package-name import (`@arc/ledger`) resolves through node_modules to a
+    // dist path that does not exist until build time, so it slips past
+    // resolution. ESLint matches the raw import string and needs no resolution,
+    // which closes that gap. Both layers are needed; neither alone is enough.
+    //
+    // Shared packages (@arc/money, @arc/contracts, @arc/bus, @arc/chain) stay
+    // allowed — they are the seam contexts are meant to share.
+    files: ['services/*/src/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@arc/ledger',
+              message:
+                'Contexts must not import each other. Communicate through @arc/contracts or the event bus.',
+            },
+            {
+              name: '@arc/product',
+              message:
+                'Contexts must not import each other. Communicate through @arc/contracts or the event bus.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  {
     // CommonJS tooling configs (dependency-cruiser) run in Node's CJS scope.
     files: ['**/*.cjs'],
     languageOptions: {
