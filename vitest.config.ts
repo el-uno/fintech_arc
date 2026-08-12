@@ -14,6 +14,7 @@ export default defineConfig({
       '@arc/bus': src('bus'),
       '@arc/chain': src('chain'),
       '@arc/product': fileURLToPath(new URL('./services/product/src/index.ts', import.meta.url)),
+      '@arc/movement': fileURLToPath(new URL('./services/movement/src/index.ts', import.meta.url)),
       '@arc/ledger': fileURLToPath(new URL('./services/ledger/src/index.ts', import.meta.url)),
     },
   },

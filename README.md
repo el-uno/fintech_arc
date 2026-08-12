@@ -16,7 +16,7 @@ Arc models the backend of a payments business that moves money between Europe an
 
 ## Status
 
-Arc is being built in phases. **Phases 0–3 are complete.** Everything below marked _planned_ is designed in [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md) but not yet implemented — this section is kept honest as the build progresses.
+Arc is being built in phases. **Phases 0–4 are complete.** Everything below marked _planned_ is designed in [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md) but not yet implemented — this section is kept honest as the build progresses.
 
 | Phase | Scope                                                                     | Status      |
 | ----- | ------------------------------------------------------------------------- | ----------- |
@@ -24,7 +24,7 @@ Arc is being built in phases. **Phases 0–3 are complete.** Everything below ma
 | 1     | Double-entry ledger, balances, invariant suite                            | ✅ Complete |
 | 2     | Accounts and multi-currency virtual accounts                              | ✅ Complete |
 | 3     | Chain-agnostic adapter + deterministic simulator                          | ✅ Complete |
-| 4     | Money movement: rails, quotes, the settlement saga, reversals             | Planned     |
+| 4     | Money movement: rails, quotes, the settlement saga, reversals             | ✅ Complete |
 | 5     | Risk & compliance: KYC/KYB, sanctions, AML, review queues                 | Planned     |
 | 6     | Platform: auth, gateway, webhooks, observability, secrets                 | Planned     |
 | 7     | Partner platform, sandbox, Last Mile API, SDKs                            | Planned     |
@@ -126,7 +126,7 @@ sequenceDiagram
     N-->>U: notification
 ```
 
-Every step has a **compensating action**. The strongest correctness claim Arc makes is that _for every injected failure at every step of this saga, the ledger ends balanced_ — asserted by the chaos suite from Phase 4 onward.
+Every step has a **compensating action**, and this is now enforced: the chaos suite fails each of the five saga steps in turn and asserts the ledger is balanced in every currency, the sender's balance is exactly what it was, and every intermediate account is back to zero. See [settlement](docs/architecture/settlement.md).
 
 ---
 
@@ -185,7 +185,8 @@ packages/
 └── chain/         Chain-agnostic driver + deterministic simulator — 23 tests
 services/
 ├── ledger/        Double-entry posting engine, balances — 37 tests
-└── product/       Onboarding, tiers, virtual accounts — 24 tests
+├── product/       Onboarding, tiers, virtual accounts — 24 tests
+└── movement/      Rails, quotes, settlement saga — 37 tests
 prisma/            Ledger tables with balance/append-only constraints, outbox
 ops/               Postgres + Redis
 docs/architecture/ledger.md   The ledger model, worked corridor example

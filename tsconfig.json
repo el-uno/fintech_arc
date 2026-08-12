@@ -18,6 +18,9 @@
     },
     {
       "path": "./services/product"
+    },
+    {
+      "path": "./services/movement"
     }
   ]
 }

@@ -74,6 +74,24 @@ importers:
         specifier: workspace:*
         version: link:../../packages/money
 
+  services/movement:
+    dependencies:
+      '@arc/bus':
+        specifier: workspace:*
+        version: link:../../packages/bus
+      '@arc/chain':
+        specifier: workspace:*
+        version: link:../../packages/chain
+      '@arc/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@arc/ledger':
+        specifier: workspace:*
+        version: link:../ledger
+      '@arc/money':
+        specifier: workspace:*
+        version: link:../../packages/money
+
   services/product:
     dependencies:
       '@arc/bus':
