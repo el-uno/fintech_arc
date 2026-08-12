@@ -1,8 +1,17 @@
 {
   "files": [],
   "references": [
-    { "path": "./packages/money" },
-    { "path": "./packages/contracts" },
-    { "path": "./packages/bus" }
+    {
+      "path": "./packages/money"
+    },
+    {
+      "path": "./packages/contracts"
+    },
+    {
+      "path": "./packages/bus"
+    },
+    {
+      "path": "./services/ledger"
+    }
   ]
 }

@@ -56,6 +56,15 @@ importers:
 
   packages/money: {}
 
+  services/ledger:
+    dependencies:
+      '@arc/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@arc/money':
+        specifier: workspace:*
+        version: link:../../packages/money
+
 packages:
 
   '@esbuild/aix-ppc64@0.21.5':

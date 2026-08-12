@@ -89,3 +89,115 @@ model IdempotencyKey {
   @@index([expiresAt], name: "idempotency_expiry_idx")
   @@map("idempotency_key")
 }
+
+// ---------------------------------------------------------------------------
+// Phase 1 — the ledger.
+//
+// The application-level posting engine already refuses to write an unbalanced
+// journal. These tables enforce the same rule again at the database level,
+// because an invariant this important must not depend on every future caller
+// remembering to go through the engine. See the constraint trigger in the
+// accompanying SQL migration.
+// ---------------------------------------------------------------------------
+
+enum AccountType {
+  asset
+  liability
+  equity
+  revenue
+  expense
+}
+
+enum EntryDirection {
+  debit
+  credit
+}
+
+enum HoldStatus {
+  active
+  released
+  captured
+}
+
+/// An account in the chart of accounts.
+///
+/// A customer's balance lives here as a *liability* — money Arc owes them —
+/// while the matching float sits in an asset account.
+model LedgerAccount {
+  id       String      @id @default(uuid()) @db.Uuid
+  tenantId String      @map("tenant_id")
+  code     String      @unique
+  name     String
+  type     AccountType
+  currency String
+
+  /// How far below zero this account may go, in minor units, as a non-positive
+  /// value. Customer accounts are 0; platform float may carry a credit line.
+  overdraftFloor BigInt   @default(0) @map("overdraft_floor")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  entries LedgerEntry[]
+  holds   LedgerHold[]
+
+  @@index([tenantId, type], name: "ledger_account_tenant_idx")
+  @@index([currency], name: "ledger_account_currency_idx")
+  @@map("ledger_account")
+}
+
+/// A set of entries posted together, recording one business event.
+model Journal {
+  id            String   @id @db.Uuid
+  tenantId      String   @map("tenant_id")
+  kind          String
+  referenceId   String   @map("reference_id")
+  description   String?
+  correlationId String?  @map("correlation_id") @db.Uuid
+  postedAt      DateTime @default(now()) @map("posted_at") @db.Timestamptz(6)
+
+  entries LedgerEntry[]
+
+  @@index([referenceId], name: "journal_reference_idx")
+  @@index([tenantId, postedAt], name: "journal_tenant_idx")
+  @@map("journal")
+}
+
+/// A single debit or credit.
+///
+/// `amount` is always positive and always an integer count of minor units;
+/// `direction` carries the sign. Entries are append-only — a correction is a new
+/// opposing journal, never an edit.
+model LedgerEntry {
+  id        String         @id @default(uuid()) @db.Uuid
+  journalId String         @map("journal_id") @db.Uuid
+  accountId String         @map("account_id") @db.Uuid
+  direction EntryDirection
+  amount    BigInt
+  currency  String
+  createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  journal Journal       @relation(fields: [journalId], references: [id], onDelete: Restrict)
+  account LedgerAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@index([accountId, currency], name: "ledger_entry_account_idx")
+  @@index([journalId], name: "ledger_entry_journal_idx")
+  @@map("ledger_entry")
+}
+
+/// A claim on posted funds that are not yet spendable.
+/// available = posted − sum(active holds)
+model LedgerHold {
+  id         String     @id @default(uuid()) @db.Uuid
+  accountId  String     @map("account_id") @db.Uuid
+  amount     BigInt
+  currency   String
+  status     HoldStatus @default(active)
+  referenceId String    @map("reference_id")
+  createdAt  DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  resolvedAt DateTime?  @map("resolved_at") @db.Timestamptz(6)
+
+  account LedgerAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@index([accountId, status], name: "ledger_hold_account_idx")
+  @@index([referenceId], name: "ledger_hold_reference_idx")
+  @@map("ledger_hold")
+}

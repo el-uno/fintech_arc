@@ -14,7 +14,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "boundaries": "depcruise packages --config .dependency-cruiser.cjs",
+    "boundaries": "depcruise packages services --config .dependency-cruiser.cjs",
     "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm boundaries && pnpm test",
     "db:up": "docker compose -f ops/docker-compose.yml up -d",
     "db:down": "docker compose -f ops/docker-compose.yml down",

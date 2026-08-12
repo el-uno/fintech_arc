@@ -16,12 +16,12 @@ Arc models the backend of a payments business that moves money between Europe an
 
 ## Status
 
-Arc is being built in phases. **Phase 0 (Foundations) is complete.** Everything below marked _planned_ is designed in [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md) but not yet implemented — this section is kept honest as the build progresses.
+Arc is being built in phases. **Phases 0–1 are complete.** Everything below marked _planned_ is designed in [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md) but not yet implemented — this section is kept honest as the build progresses.
 
 | Phase | Scope                                                                     | Status      |
 | ----- | ------------------------------------------------------------------------- | ----------- |
 | 0     | Workspace, money primitives, event bus + outbox, boundary enforcement, CI | ✅ Complete |
-| 1     | Double-entry ledger, balances, invariant suite                            | Planned     |
+| 1     | Double-entry ledger, balances, invariant suite                            | ✅ Complete |
 | 2     | Accounts and multi-currency virtual accounts                              | Planned     |
 | 3     | Chain-agnostic adapter + deterministic simulator                          | Planned     |
 | 4     | Money movement: rails, quotes, the settlement saga, reversals             | Planned     |
@@ -182,9 +182,12 @@ packages/
 ├── money/         Money, Rate, exact rounding — 94 tests, property-based
 ├── contracts/     Event catalogue and envelope — the seam between contexts
 └── bus/           Event bus, transactional outbox, dispatcher — 14 tests
-prisma/            Outbox, processed-event, and idempotency-key tables
+services/
+└── ledger/        Double-entry posting engine, balances — 33 tests
+prisma/            Ledger tables with balance/append-only constraints, outbox
 ops/               Postgres + Redis
-docs/BUILD_PLAN.md The full ten-phase plan
+docs/architecture/ledger.md   The ledger model, worked corridor example
+docs/BUILD_PLAN.md            The full ten-phase plan
 ```
 
 Two guarantees are already pinned by tests:
@@ -192,6 +195,8 @@ Two guarantees are already pinned by tests:
 **Value is conserved under allocation.** Splitting any amount across any weights always sums back to exactly the original — the property that stops a cent appearing or vanishing when a transfer is broken into fees.
 
 **Delivery is at-least-once, processing is effectively-once.** The outbox stages events in the same transaction as the state change. Handlers that already succeeded are never re-run on retry, and a poison event is parked for review rather than dropped or left blocking the queue.
+
+**A journal cannot be unbalanced.** Enforced twice: the posting engine validates before writing anything, and the database refuses independently — a `DEFERRABLE INITIALLY DEFERRED` constraint trigger means a transaction leaving any journal unbalanced in any currency cannot commit, even from raw SQL. Entries are append-only; corrections are new reversing journals. See [the ledger](docs/architecture/ledger.md).
 
 ---
 

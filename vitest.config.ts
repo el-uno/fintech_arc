@@ -12,6 +12,7 @@ export default defineConfig({
       '@arc/money': src('money'),
       '@arc/contracts': src('contracts'),
       '@arc/bus': src('bus'),
+      '@arc/ledger': fileURLToPath(new URL('./services/ledger/src/index.ts', import.meta.url)),
     },
   },
   test: {
