@@ -16,7 +16,7 @@ Arc models the backend of a payments business that moves money between Europe an
 
 ## Status
 
-Arc is being built in phases. **Phases 0–4 are complete.** Everything below marked _planned_ is designed in [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md) but not yet implemented — this section is kept honest as the build progresses.
+Arc is being built in phases. **Phases 0–5 are complete.** Everything below marked _planned_ is designed in [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md) but not yet implemented — this section is kept honest as the build progresses.
 
 | Phase | Scope                                                                     | Status      |
 | ----- | ------------------------------------------------------------------------- | ----------- |
@@ -25,7 +25,7 @@ Arc is being built in phases. **Phases 0–4 are complete.** Everything below ma
 | 2     | Accounts and multi-currency virtual accounts                              | ✅ Complete |
 | 3     | Chain-agnostic adapter + deterministic simulator                          | ✅ Complete |
 | 4     | Money movement: rails, quotes, the settlement saga, reversals             | ✅ Complete |
-| 5     | Risk & compliance: KYC/KYB, sanctions, AML, review queues                 | Planned     |
+| 5     | Risk & compliance: KYC/KYB, sanctions, AML, review queues                 | ✅ Complete |
 | 6     | Platform: auth, gateway, webhooks, observability, secrets                 | Planned     |
 | 7     | Partner platform, sandbox, Last Mile API, SDKs                            | Planned     |
 | 8     | Reconciliation, reporting, runbooks                                       | Planned     |
@@ -186,7 +186,8 @@ packages/
 services/
 ├── ledger/        Double-entry posting engine, balances — 37 tests
 ├── product/       Onboarding, tiers, virtual accounts — 24 tests
-└── movement/      Rails, quotes, settlement saga — 37 tests
+├── movement/      Rails, quotes, settlement saga — 42 tests
+└── risk/          KYC/KYB, sanctions, AML rules, review queues — 47 tests
 prisma/            Ledger tables with balance/append-only constraints, outbox
 ops/               Postgres + Redis
 docs/architecture/ledger.md   The ledger model, worked corridor example
@@ -198,6 +199,8 @@ Two guarantees are already pinned by tests:
 **Value is conserved under allocation.** Splitting any amount across any weights always sums back to exactly the original — the property that stops a cent appearing or vanishing when a transfer is broken into fees.
 
 **Delivery is at-least-once, processing is effectively-once.** The outbox stages events in the same transaction as the state change. Handlers that already succeeded are never re-run on retry, and a poison event is parked for review rather than dropped or left blocking the queue.
+
+**Compliance blocks money movement, it does not observe it.** A sanctions hit or a structuring pattern halts the transfer before a single journal is posted, opens a case with an SLA, and records a four-eyes audit trail. Asserted against the real saga, not a stub. See [compliance](docs/architecture/compliance.md).
 
 **Chain settlement is deterministic and chain-agnostic.** Five chains with genuinely different behaviour — Polygon has 2s blocks but needs 128 confirmations, so it settles slowest despite looking fastest. A seeded run reproduces the same blocks, reorgs and transaction outcomes every time, and a reorg rolls a mined transaction back to pending before it is re-mined.
 

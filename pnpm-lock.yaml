@@ -91,12 +91,24 @@ importers:
       '@arc/money':
         specifier: workspace:*
         version: link:../../packages/money
+      '@arc/risk':
+        specifier: workspace:*
+        version: link:../risk
 
   services/product:
     dependencies:
       '@arc/bus':
         specifier: workspace:*
         version: link:../../packages/bus
+      '@arc/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@arc/money':
+        specifier: workspace:*
+        version: link:../../packages/money
+
+  services/risk:
+    dependencies:
       '@arc/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts

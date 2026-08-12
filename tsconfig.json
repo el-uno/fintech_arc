@@ -21,6 +21,9 @@
     },
     {
       "path": "./services/movement"
+    },
+    {
+      "path": "./services/risk"
     }
   ]
 }

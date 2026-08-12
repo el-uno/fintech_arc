@@ -105,6 +105,16 @@ export default tseslint.config(
                 'Contexts must not import each other. Communicate through @arc/contracts or the event bus.',
             },
             {
+              name: '@arc/movement',
+              message:
+                'Contexts must not import each other. Communicate through @arc/contracts or the event bus.',
+            },
+            {
+              name: '@arc/risk',
+              message:
+                'Contexts must not import each other. Communicate through @arc/contracts or the event bus.',
+            },
+            {
               name: '@arc/product',
               message:
                 'Contexts must not import each other. Communicate through @arc/contracts or the event bus.',

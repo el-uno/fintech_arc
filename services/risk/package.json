@@ -1,5 +1,5 @@
 {
-  "name": "@arc/movement",
+  "name": "@arc/risk",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -17,10 +17,6 @@
   },
   "dependencies": {
     "@arc/money": "workspace:*",
-    "@arc/contracts": "workspace:*",
-    "@arc/bus": "workspace:*",
-    "@arc/chain": "workspace:*",
-    "@arc/ledger": "workspace:*",
-    "@arc/risk": "workspace:*"
+    "@arc/contracts": "workspace:*"
   }
 }
