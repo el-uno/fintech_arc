@@ -33,6 +33,15 @@
     },
     {
       "path": "./apps/scenario"
+    },
+    {
+      "path": "./packages/sdk-node"
+    },
+    {
+      "path": "./services/partner"
+    },
+    {
+      "path": "./apps/api"
     }
   ]
 }

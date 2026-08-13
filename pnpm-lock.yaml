@@ -46,6 +46,30 @@ importers:
         specifier: ^3.24.1
         version: 3.25.76
 
+  apps/api:
+    dependencies:
+      '@arc/chain':
+        specifier: workspace:*
+        version: link:../../packages/chain
+      '@arc/ledger':
+        specifier: workspace:*
+        version: link:../../services/ledger
+      '@arc/money':
+        specifier: workspace:*
+        version: link:../../packages/money
+      '@arc/movement':
+        specifier: workspace:*
+        version: link:../../services/movement
+      '@arc/partner':
+        specifier: workspace:*
+        version: link:../../services/partner
+      '@arc/platform':
+        specifier: workspace:*
+        version: link:../../services/platform
+      '@arc/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk-node
+
   apps/scenario:
     dependencies:
       '@arc/chain':
@@ -93,6 +117,8 @@ importers:
 
   packages/money: {}
 
+  packages/sdk-node: {}
+
   services/ledger:
     dependencies:
       '@arc/bus':
@@ -128,6 +154,15 @@ importers:
       '@arc/risk':
         specifier: workspace:*
         version: link:../risk
+
+  services/partner:
+    dependencies:
+      '@arc/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@arc/money':
+        specifier: workspace:*
+        version: link:../../packages/money
 
   services/platform:
     dependencies:

@@ -33,11 +33,18 @@ export default defineConfig({
       '@arc/movement': fileURLToPath(new URL('./services/movement/src/index.ts', import.meta.url)),
       '@arc/risk': fileURLToPath(new URL('./services/risk/src/index.ts', import.meta.url)),
       '@arc/platform': fileURLToPath(new URL('./services/platform/src/index.ts', import.meta.url)),
+      '@arc/partner': fileURLToPath(new URL('./services/partner/src/index.ts', import.meta.url)),
+      '@arc/sdk': fileURLToPath(new URL('./packages/sdk-node/src/index.ts', import.meta.url)),
+      '@arc/api': fileURLToPath(new URL('./apps/api/src/router.ts', import.meta.url)),
       '@arc/ledger': fileURLToPath(new URL('./services/ledger/src/index.ts', import.meta.url)),
     },
   },
   test: {
-    include: ['packages/*/test/**/*.test.ts', 'services/*/test/**/*.test.ts'],
+    include: [
+      'packages/*/test/**/*.test.ts',
+      'services/*/test/**/*.test.ts',
+      'apps/*/test/**/*.test.ts',
+    ],
     environment: 'node',
     coverage: {
       provider: 'v8',

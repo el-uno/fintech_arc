@@ -71,6 +71,12 @@ export interface SignedRequest {
   readonly timestamp: number;
   readonly signature: string;
   readonly clientId: string;
+  /**
+   * Per-request random value. Without it, two identical requests in the same
+   * millisecond produce the same signature and the second is indistinguishable
+   * from a replay — which would reject a legitimate idempotent retry.
+   */
+  readonly nonce?: string;
 }
 
 /**
@@ -174,6 +180,7 @@ export class AuthService {
       request.method.toUpperCase(),
       request.path,
       String(request.timestamp),
+      request.nonce ?? '',
       createHmac('sha256', '').update(request.body).digest('hex'),
     ].join('\n');
   }

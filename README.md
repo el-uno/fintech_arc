@@ -16,7 +16,7 @@ Arc models the backend of a payments business that moves money between Europe an
 
 ## Status
 
-Arc is being built in phases. **Phases 0–6 are complete.** Everything below marked _planned_ is designed in [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md) but not yet implemented — this section is kept honest as the build progresses.
+Arc is being built in phases. **Phases 0–7 are complete.** Everything below marked _planned_ is designed in [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md) but not yet implemented — this section is kept honest as the build progresses.
 
 | Phase | Scope                                                                     | Status      |
 | ----- | ------------------------------------------------------------------------- | ----------- |
@@ -27,7 +27,7 @@ Arc is being built in phases. **Phases 0–6 are complete.** Everything below ma
 | 4     | Money movement: rails, quotes, the settlement saga, reversals             | ✅ Complete |
 | 5     | Risk & compliance: KYC/KYB, sanctions, AML, review queues                 | ✅ Complete |
 | 6     | Platform: auth, gateway, webhooks, observability, secrets                 | ✅ Complete |
-| 7     | Partner platform, sandbox, Last Mile API, SDKs                            | Planned     |
+| 7     | Partner platform, sandbox, Last Mile API, SDKs                            | ✅ Complete |
 | 8     | Reconciliation, reporting, runbooks                                       | Planned     |
 | 9     | Documentation and public polish                                           | Planned     |
 
@@ -188,15 +188,18 @@ packages/
 ├── contracts/     Event catalogue and envelope — the seam between contexts
 ├── bus/           Event bus, outbox (in-memory + Postgres) — 14 tests
 ├── chain/         Chain-agnostic driver + deterministic simulator — 23 tests
-└── db/            Prisma client and transaction helpers
+├── db/            Prisma client and transaction helpers
+└── sdk-node/      The partner SDK: signing, retries, webhook verification
 apps/
+├── api/           The Last Mile API — the composition root — 14 tests
 └── scenario/      `pnpm dev` — a corridor transfer against Postgres
 services/
 ├── ledger/        Double-entry engine, Postgres store, locking — 55 tests
 ├── product/       Onboarding, tiers, virtual accounts — 24 tests
 ├── movement/      Rails, quotes, settlement saga — 42 tests
 ├── risk/          KYC/KYB, sanctions, AML rules, review queues — 47 tests
-└── platform/      Auth, gateway, webhooks, secrets, tracing — 52 tests
+├── platform/      Auth, gateway, webhooks, secrets, tracing — 52 tests
+└── partner/       Onboarding, sandbox, usage and billing
 prisma/            Ledger tables with balance/append-only constraints, outbox
 ops/               Postgres + Redis
 docs/architecture/ledger.md   The ledger model, worked corridor example
@@ -208,6 +211,8 @@ Two guarantees are already pinned by tests:
 **Value is conserved under allocation.** Splitting any amount across any weights always sums back to exactly the original — the property that stops a cent appearing or vanishing when a transfer is broken into fees.
 
 **Delivery is at-least-once, processing is effectively-once.** The outbox stages events in the same transaction as the state change. Handlers that already succeeded are never re-run on retry, and a poison event is parked for review rather than dropped or left blocking the queue.
+
+**A partner can integrate using only the SDK.** Sign up, get sandbox credentials, quote, and complete a EUR→KES payout — asserted end to end against the real router, saga and ledger. Sandbox failures are triggered by magic amounts, so the failure path is the same code production takes. See [partner platform](docs/architecture/partner-platform.md).
 
 **It runs against a real database, and the invariants are tested there.** `pnpm dev` executes a full corridor transfer against Postgres and prints every journal. 18 integration tests exercise the constraint triggers, append-only enforcement, and concurrent posting — including two that prove row locking stops concurrent transfers double-spending the same balance.
 

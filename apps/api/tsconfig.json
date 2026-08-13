@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "rootDir": "./src", "outDir": "./dist" },
+  "include": ["src/**/*.ts"],
+  "references": [
+    { "path": "../../packages/money" },
+    { "path": "../../packages/chain" },
+    { "path": "../../services/ledger" },
+    { "path": "../../services/movement" },
+    { "path": "../../services/partner" },
+    { "path": "../../services/platform" }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "name": "@arc/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/router.js",
+  "types": "./dist/router.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/router.d.ts",
+      "default": "./dist/router.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b"
+  },
+  "dependencies": {
+    "@arc/chain": "workspace:*",
+    "@arc/ledger": "workspace:*",
+    "@arc/money": "workspace:*",
+    "@arc/movement": "workspace:*",
+    "@arc/partner": "workspace:*",
+    "@arc/platform": "workspace:*",
+    "@arc/sdk": "workspace:*"
+  }
+}
