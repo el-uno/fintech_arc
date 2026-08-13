@@ -16,7 +16,7 @@ Arc models the backend of a payments business that moves money between Europe an
 
 ## Status
 
-Arc is being built in phases. **Phases 0–7 are complete.** Everything below marked _planned_ is designed in [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md) but not yet implemented — this section is kept honest as the build progresses.
+Arc is being built in phases. **Phases 0–8 are complete.** Everything below marked _planned_ is designed in [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md) but not yet implemented — this section is kept honest as the build progresses.
 
 | Phase | Scope                                                                     | Status      |
 | ----- | ------------------------------------------------------------------------- | ----------- |
@@ -28,7 +28,7 @@ Arc is being built in phases. **Phases 0–7 are complete.** Everything below ma
 | 5     | Risk & compliance: KYC/KYB, sanctions, AML, review queues                 | ✅ Complete |
 | 6     | Platform: auth, gateway, webhooks, observability, secrets                 | ✅ Complete |
 | 7     | Partner platform, sandbox, Last Mile API, SDKs                            | ✅ Complete |
-| 8     | Reconciliation, reporting, runbooks                                       | Planned     |
+| 8     | Reconciliation, reporting, runbooks                                       | ✅ Complete |
 | 9     | Documentation and public polish                                           | Planned     |
 
 ---
@@ -194,7 +194,7 @@ apps/
 ├── api/           The Last Mile API — the composition root — 14 tests
 └── scenario/      `pnpm dev` — a corridor transfer against Postgres
 services/
-├── ledger/        Double-entry engine, Postgres store, locking — 55 tests
+├── ledger/        Double-entry engine, Postgres store, reconciliation — 76 tests
 ├── product/       Onboarding, tiers, virtual accounts — 24 tests
 ├── movement/      Rails, quotes, settlement saga — 42 tests
 ├── risk/          KYC/KYB, sanctions, AML rules, review queues — 47 tests
@@ -211,6 +211,8 @@ Two guarantees are already pinned by tests:
 **Value is conserved under allocation.** Splitting any amount across any weights always sums back to exactly the original — the property that stops a cent appearing or vanishing when a transfer is broken into fees.
 
 **Delivery is at-least-once, processing is effectively-once.** The outbox stages events in the same transaction as the state change. Handlers that already succeeded are never re-run on retry, and a poison event is parked for review rather than dropped or left blocking the queue.
+
+**Balanced books are not the same as correct books.** Three-way reconciliation compares the ledger against bank statements and chain history; every break opens a case with an SLA. A currency can balance perfectly while Arc holds less than it owes — the float-position report is what notices. See [reconciliation](docs/architecture/reconciliation.md).
 
 **A partner can integrate using only the SDK.** Sign up, get sandbox credentials, quote, and complete a EUR→KES payout — asserted end to end against the real router, saga and ledger. Sandbox failures are triggered by magic amounts, so the failure path is the same code production takes. See [partner platform](docs/architecture/partner-platform.md).
 

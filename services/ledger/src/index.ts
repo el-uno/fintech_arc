@@ -57,3 +57,33 @@ export {
   PrismaLedgerStore,
   type PrismaLedgerStoreOptions,
 } from './prisma-store.js';
+
+export {
+  internalRecordsFrom,
+  raiseCases,
+  Reconciler,
+  type BreakKind,
+  type BreakSeverity,
+  type CaseOpener,
+  type CaseRequest,
+  type ExternalRecord,
+  type InternalRecord,
+  type RaisedCase,
+  type ReconciliationBreak,
+  type ReconciliationOptions,
+  type ReconciliationResult,
+  type Source,
+} from './reconciliation.js';
+
+export {
+  corridorSummary,
+  floatPosition,
+  profitAndLoss,
+  statement,
+  type AccountLine,
+  type CorridorSummary,
+  type FloatPosition,
+  type ProfitAndLoss,
+  type Statement,
+  type StatementLine,
+} from './reporting.js';

@@ -20,5 +20,8 @@
     "@arc/contracts": "workspace:*",
     "@arc/bus": "workspace:*",
     "@arc/db": "workspace:*"
+  },
+  "devDependencies": {
+    "@arc/risk": "workspace:*"
   }
 }

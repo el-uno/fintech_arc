@@ -133,6 +133,10 @@ importers:
       '@arc/money':
         specifier: workspace:*
         version: link:../../packages/money
+    devDependencies:
+      '@arc/risk':
+        specifier: workspace:*
+        version: link:../risk
 
   services/movement:
     dependencies:
