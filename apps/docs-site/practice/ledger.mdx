@@ -1,0 +1,153 @@
+---
+title: "Ledger and money"
+description: "Double-entry from first principles, derived balances, multi-currency journals, and the invariant with no tolerance."
+icon: "coins"
+---
+
+<span className="arc-eyebrow">Practice · question bank · answer out loud first</span>
+
+Twelve questions, roughly in order of difficulty. Each accordion contains a worked answer and the follow-up an interviewer is likely to ask next.
+
+---
+
+## Fundamentals
+
+<AccordionGroup>
+  <Accordion title="1 · Why double-entry rather than a balance column?" icon="scale-balanced">
+    **Answer.** A balance column *is* the record, so there is nothing to check it against. Double-entry makes the entry log the record and the balance a projection of it, which means every figure is reconstructable and every discrepancy is locatable.
+
+    It also forces you to say where value came *from*. `UPDATE balance = balance - 1000` records that money left; it does not record where it went, so "do we hold what we owe?" is unanswerable.
+
+    **Follow-up: isn't that just an audit log next to the balance?** No: an audit log is written *alongside* the truth and can drift from it. Here the log **is** the truth and the balance is derived, so drift is impossible by construction rather than by discipline.
+  </Accordion>
+
+  <Accordion title="2 · Why is a customer's balance a liability rather than an asset?" icon="hand-holding-dollar">
+    **Answer.** From Arc's perspective, customer money is money Arc **owes**. Funding a virtual account gains Arc an asset, float at a bank or on-chain, and simultaneously creates a debt of the same size. Those are the two sides of one journal.
+
+    Pairing them is what makes solvency answerable: compare `asset.float.bank.EUR` against the sum of EUR customer liabilities and you have "do we hold what we owe?" as a query.
+
+    **Follow-up: what happens if they diverge?** That is a reconciliation break, and it should open a case rather than be silently corrected. The entries are the record; a mismatch means either an external movement was not recorded or a recorded movement did not happen. Both need a human.
+  </Accordion>
+
+  <Accordion title="3 · Why must amounts be positive, with direction carrying the sign?" icon="plus-minus">
+    **Answer.** Otherwise one fact has two representations: a −€10 debit and a +€10 credit are the same event written two ways. Two representations mean two code paths, two sets of tests, and eventually two behaviours that disagree.
+
+    One canonical form means `assertBalanced` can sum debits and credits separately and compare, without normalising first.
+
+    **Follow-up: what enforces it?** A `CHECK (amount > 0)` in the database, plus a check in `assertBalanced` that rejects zero and negative amounts. Two layers, because the application check protects the API and the database check protects against everything else.
+  </Accordion>
+
+  <Accordion title="4 · Why can't you just fix a bad entry?" icon="lock">
+    **Answer.** Entries are append-only. A correction is a new, opposing journal.
+
+    Editing destroys the distinction between *what happened* and *what was meant to happen*, which is the entire content of an audit trail. An auditor does not want the corrected number; they want to see the error and the correction.
+
+    **Follow-up: how is that enforced?** A `BEFORE UPDATE OR DELETE` trigger on `ledger_entry` that raises: `ledger_entry is append-only: post a reversing journal instead`. It holds against raw SQL, not just against the application.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Multi-currency
+
+<AccordionGroup>
+  <Accordion title="5 · Why does a journal balance per currency independently?" icon="right-left">
+    **Answer.** Because offsetting a EUR debit against a USDC credit is adding quantities of different things. It is numerically possible and economically meaningless: the resulting "balanced" journal would assert an equivalence that no exchange rate justifies at that instant.
+
+    So `balanceByCurrency` buckets entries by currency and each bucket must close on its own.
+
+    **Follow-up: then how does an FX conversion balance at all?** It cannot be a two-legged journal. It needs **four** legs and a bridge: the EUR side closes against `equity.fx_position.EUR`, the USDC side against `equity.fx_position.USDC`. Neither half references the other.
+  </Accordion>
+
+  <Accordion title="6 · What do the FX position accounts actually represent?" icon="chart-line">
+    **Answer.** The open currency exposure. If Arc has sold EUR for USDC and not covered it, the pair carries offsetting standing balances: that *is* the unhedged position.
+
+    This is the good answer to give, because it shows the constraint bought something. Per-currency balancing forced the position accounts to exist, and their existence made exposure **visible in the trial balance** rather than living in a spreadsheet.
+
+    **Follow-up: what would you do with that?** Feed it to treasury. A position account trending in one direction is either an intentional carry or a hedging failure, and both are things you want a number for rather than a hunch.
+  </Accordion>
+
+  <Accordion title="7 · A transfer converts EUR to KES via USDC. How many currencies must balance?" icon="calculator">
+    **Answer.** Four, across the sequence: EUR, USDC, KES, and the fee asset (ETH) for gas. Each journal balances independently in every currency it touches, and the trial balance is zero in all four at the end.
+
+    The gas journal is separate and in a fourth currency entirely: `Dr expense.network_fee.ETH`, `Cr asset.float.chain.ETH`.
+
+    **Follow-up: why is the gas journal separate?** So it can be excluded from compensation. Gas was really spent; reversing it would misstate the expense. It balances on its own, so leaving it out of the unwind keeps the trial balance at zero.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Exactness
+
+<AccordionGroup>
+  <Accordion title="8 · Why bigint minor units rather than a decimal type?" icon="hashtag">
+    **Answer.** Two reasons, and the second is decisive.
+
+    The familiar one: floats are binary fractions, so `0.1 + 0.2 !== 0.3`, and the balance invariant would need an epsilon. A ledger with an epsilon is not a ledger: "how far off is acceptable?" has no defensible answer.
+
+    The decisive one: doubles are exact only to 2^53. That is fine for cents and **hopeless for an 18-decimal token**, where a single balance routinely exceeds 1e18. For a chain-agnostic system that alone settles it.
+
+    **Follow-up: why not a decimal library?** Viable, and widely used. Rejected because integers are faster on the hot path, map directly onto both ISO-4217 minor units and on-chain base units, and remove the question of where precision is configured, which is a setting that eventually exists in two places that disagree. The cost is ergonomics, and that cost was accepted.
+  </Accordion>
+
+  <Accordion title="9 · A 1.5% fee on €33.33 is €0.49995. Where does the remainder go?" icon="divide">
+    **Answer.** To a rounding account, as its own ledger entry.
+
+    `divRound` returns the rounded value under an explicit mode; `divResidual` returns the **exact** leftover so it can be posted. The journal balances, the fee is €0.49, and €0.01 sits in `revenue.rounding.EUR` where someone can query it.
+
+    **Follow-up: why does it matter?** Because the alternative is an unrecorded transfer of value. Rounding down means the customer keeps a fraction; rounding up means Arc takes one. Over volume, that is a policy nobody wrote, executing continuously, and drifting with traffic mix. [The cent that vanished](/stories/the-cent-that-vanished).
+  </Accordion>
+
+  <Accordion title="10 · What property guarantees no cent appears or vanishes when splitting?" icon="scissors">
+    **Answer.** *Splitting any amount across any weights sums back to exactly the original.* It is property-based, generated over random amounts and weight vectors.
+
+    The naive implementation fails immediately: €10.00 split three ways gives €3.33 each and loses a cent. Arc's allocator distributes remainders deterministically so the total is preserved.
+
+    **Follow-up: why property-based rather than examples?** Because examples only cover cases someone thought of, and the failures in this domain are combinations nobody anticipated. A property test finds the counterexample and shrinks it to something readable.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Enforcement
+
+<AccordionGroup>
+  <Accordion title="11 · The engine already validates balance. Why also enforce it in the database?" icon="shield-halved">
+    **Answer.** An invariant that depends on every future developer going through the right class is not an invariant: it is a convention, and conventions erode under deadline.
+
+    The database rules hold against raw SQL, a migration script, or a `psql` session at 3am during an incident. The two layers also **fail for different reasons**, which is the property that makes redundancy worth its cost.
+
+    **Follow-up: how do you check balance in the database without rejecting every individual insert?** `DEFERRABLE INITIALLY DEFERRED` on the constraint trigger. It runs at `COMMIT`, not per row, so a journal can be inserted one entry at a time and is judged only once complete. A transaction leaving any journal unbalanced in any currency cannot commit.
+  </Accordion>
+
+  <Accordion title="12 · Your test suite passes. How do you know it would catch a real defect?" icon="vial">
+    **Answer.** You break the code on purpose and watch.
+
+    Three deliberate defects in the ledger: removing balance validation failed 3 tests, an off-by-one overdraft floor failed 1, and `entrySign` ignoring account type failed 9.
+
+    The valuable result was in the saga: **compensating in forward order failed zero of sixteen tests**, because reversals commute so balance cannot see ordering. Two tests asserting reversal order and account pairing were added; the mutant now fails.
+
+    **Follow-up: what did that teach you?** That balance is necessary but not sufficient: an audit trail can be false while the arithmetic is true. More generally: ask what each assertion *cannot* see, and write a test for that. [The full scenario](/stories/the-journal-that-balanced-and-lied).
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Questions to ask them back
+
+Good candidates ask these. They also happen to be the questions whose answers tell you whether the team has done this before.
+
+- Are balances derived or stored? If stored, what reconciles them, and how often?
+- Is the balance invariant enforced anywhere other than application code?
+- What is your rounding policy, and where does the residual go?
+- What happens to a journal that fails validation halfway through being written?
+
+<CardGroup cols={2}>
+  <Card title="Next: distributed systems" icon="network-wired" href="/practice/distributed-systems">
+    Sagas, the outbox, idempotency, compensation ordering.
+  </Card>
+  <Card title="Test yourself" icon="circle-question" href="/practice/quiz-ledger">
+    Twelve questions, several with a plausible wrong answer.
+  </Card>
+</CardGroup>

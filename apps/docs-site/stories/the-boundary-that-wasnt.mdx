@@ -1,0 +1,175 @@
+---
+title: "The boundary that wasn't"
+description: "The architecture rule was in CI, green on every build, and had been silently skipping half the violations it existed to catch."
+icon: "shield-halved"
+---
+
+<span className="arc-eyebrow arc-eyebrow--amber">Story · distributed failure · this one actually happened · 5 min</span>
+
+<div className="arc-symptom">
+The modular-monolith claim rests on one rule: **no context imports another context's code.** `dependency-cruiser` enforces it in CI. It had been green on every build since Phase 0.
+
+Then someone wrote a deliberate violation to check the rule fired.
+
+It did not.
+</div>
+
+---
+
+## The claim being protected
+
+Arc's whole topology argument is that six bounded contexts can share one deployable without becoming a monolith, **because the boundary is mechanically checked rather than merely documented**.
+
+Remove the check and the claim collapses into an intention. Every codebase with a "we don't do that" rule has a directory full of places where someone did, under deadline, with a comment saying `// TODO: refactor`.
+
+<div className="arc-claim">
+A modular monolith whose boundaries are documented rather than enforced is a monolith with aspirations. The enforcement **is** the architecture.
+</div>
+
+So the enforcement had better work.
+
+---
+
+## The probe
+
+Two violations were written, one of each shape a developer could plausibly produce:
+
+<Columns cols={2}>
+  <div>
+    **Relative import**
+
+    ```ts
+    // services/movement/src/saga.ts
+    import { post } from '../../ledger/src/posting';
+    ```
+
+    What you write when you are inside the monorepo and reaching sideways.
+  </div>
+  <div>
+    **Package-name import**
+
+    ```ts
+    // services/movement/src/saga.ts
+    import { post } from '@arc/ledger';
+    ```
+
+    What you write when your editor autocompletes it and it looks like every other import in the file.
+  </div>
+</Columns>
+
+The first failed the build immediately, as designed.
+
+**The second passed.** No error. No warning. A clean green build with a cross-context import sitting in the source.
+
+---
+
+## Why it passed
+
+The cause is mundane, which is what makes it dangerous.
+
+<Steps>
+  <Step title="dependency-cruiser resolves imports to file paths">
+    It builds a dependency graph of actual files and applies rules to the edges. To apply a rule to an edge, the edge has to exist.
+  </Step>
+  <Step title="@arc/ledger resolves through node_modules">
+    In a pnpm workspace it is a symlink to `services/ledger`, whose `package.json` points its entry at **`dist/index.js`**.
+  </Step>
+  <Step title="dist does not exist until after a build">
+    Lint runs before build. The target file is not there.
+  </Step>
+  <Step title="An unresolvable edge is skipped, not failed">
+    dependency-cruiser cannot resolve it, so it does not add the edge to the graph. No edge, no rule evaluation, no violation.
+  </Step>
+</Steps>
+
+<div className="arc-claim">
+The rule did not fail. It **did not apply**: which is a much worse failure mode, because a rule that errors gets fixed and a rule that quietly does nothing gets trusted.
+</div>
+
+The configuration was correct. The rule was correct. The build order made half the input invisible.
+
+---
+
+## Why nobody noticed
+
+Every honest signal pointed the wrong way:
+
+- CI was green, and green on a rule that exists means the rule is working.
+- Relative violations *were* being caught, so the rule visibly did something.
+- No cross-context package import existed yet, so there was nothing to catch: the false negative had no false negatives to produce.
+- The configuration reviewed correctly. Reading it would never reveal the problem, because the problem is not in the configuration.
+
+<div className="arc-claim">
+**A rule with no violations is indistinguishable from a rule that cannot detect violations.** The only way to tell them apart is to produce one on purpose.
+</div>
+
+---
+
+## The fix
+
+A second, independent layer using a completely different mechanism, ESLint's `no-restricted-imports`, which matches on the **import specifier string** rather than on a resolved file:
+
+```js
+'no-restricted-imports': ['error', {
+  patterns: [{
+    group: ['@arc/ledger', '@arc/product', '@arc/movement', '@arc/risk'],
+    message: 'Contexts must not import each other. Use @arc/contracts or a port.',
+  }],
+}]
+```
+
+It never resolves anything, so build order is irrelevant to it.
+
+| Mechanism | Catches | Misses | Depends on |
+| --- | --- | --- | --- |
+| `dependency-cruiser` | Relative imports | Package-name imports | Files existing on disk |
+| ESLint `no-restricted-imports` | Package-name imports | Relative imports | Nothing: pure string matching |
+
+Neither is sufficient. Together they cover both shapes, and, more importantly, **they fail differently**, so a change that defeats one is unlikely to defeat the other.
+
+<div className="arc-claim">
+Both probes were re-run and both fired. That verification is the deliverable, not the configuration.
+</div>
+
+---
+
+## The generalisable lesson
+
+This is not really about dependency-cruiser. It is about a category of control that includes most of what teams rely on:
+
+<AccordionGroup>
+  <Accordion title="Controls that fail open are worse than no control" icon="lock-open">
+    A missing check is a known gap. A check that silently does not apply is a **believed** guarantee, and people build on believed guarantees.
+
+    The same shape appears in permissive CORS matchers, auth middleware not mounted on a route group, alerts on a metric that stopped being emitted, and backup jobs writing to a bucket nobody has restored from.
+  </Accordion>
+
+  <Accordion title="Test the control, not just the system" icon="vial">
+    Nothing in a normal test suite exercises "does the linter catch this?", that is a property of the *pipeline*, and pipelines are usually the least-tested code an organisation has.
+
+    The cheap version costs almost nothing: keep a fixture that violates each rule and assert the tool reports it.
+  </Accordion>
+
+  <Accordion title="Prefer layers that fail differently" icon="layer-group">
+    Two checks with the same failure mode are one check with extra runtime. dependency-cruiser depends on module resolution; ESLint pattern matching depends on nothing. That independence is the property worth having.
+
+    Arc uses the same reasoning in the ledger: the posting engine validates balance, and the **database validates again** via a constraint trigger. Application logic and a `DEFERRABLE INITIALLY DEFERRED` trigger fail for entirely different reasons.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## The one-line version
+
+<div className="arc-claim">
+**An architecture rule you have not tried to break is a rule you do not know you have.**
+</div>
+
+<CardGroup cols={2}>
+  <Card title="ADR 0002: modular monolith" icon="cubes" href="/decisions/0002-modular-monolith">
+    The decision this rule protects, with its costs stated.
+  </Card>
+  <Card title="Contexts and events" icon="inbox" href="/architecture/contexts-and-events">
+    What contexts use *instead* of importing each other.
+  </Card>
+</CardGroup>

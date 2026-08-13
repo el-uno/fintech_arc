@@ -1,0 +1,137 @@
+---
+title: "Risk and compliance"
+description: "Tiering, fuzzy name matching, the five AML rule families, four-eyes approval, and why compliance blocks rather than observes."
+icon: "shield"
+---
+
+<span className="arc-eyebrow">Practice · question bank · answer out loud first</span>
+
+Ten questions. Compliance is the domain where engineers most often give a technically fine answer that reveals they have never had to defend a decision to a regulator: these are aimed at that gap.
+
+---
+
+## Structure
+
+<AccordionGroup>
+  <Accordion title="1 · Should compliance screening be synchronous or asynchronous?" icon="gate">
+    **Answer.** Synchronous, and blocking. Compliance is a **hard pre-condition** on money movement, not a side channel.
+
+    A transfer that is rejected or flagged never reaches `reserve`, so no money moves at all.
+
+    The asynchronous alternative, screen in parallel, claw back if needed, is common and much worse. Its failure mode is "we paid a sanctioned party and are now trying to recall it", which is a regulatory event rather than an engineering one.
+
+    **Follow-up: what about latency?** It is a few hundred milliseconds against a settlement window of 20 seconds. The latency argument for asynchronous screening does not survive contact with the actual numbers.
+  </Accordion>
+
+  <Accordion title="2 · Why is Tier 0 a limit of zero rather than a boolean flag?" icon="toggle-off">
+    **Answer.** So one code path handles it. An unverified account can hold a virtual account and **receive** funds but cannot send: modelling that as a zero ceiling rather than a separate `canSend` boolean means the limit check covers it without a branch.
+
+    **Follow-up: what is the trap?** `null` means *unlimited* and is distinct from `0n`. The check tests `=== null` explicitly rather than relying on falsiness, because `0n` and `null` are both falsy, and collapsing them inverts the policy exactly backwards: the unverified account becomes the unlimited one.
+  </Accordion>
+
+  <Accordion title="3 · Why express limits in one reference currency?" icon="euro-sign">
+    **Answer.** Because a limit table per corridor is a limit regime nobody can audit. Arc expresses every tier ceiling in **EUR minor units** regardless of transfer currency; callers convert first.
+
+    One table, one place to change a policy, one number a compliance officer can check.
+
+    **Follow-up: what does that cost?** A conversion on every limit check, and a dependency on the rate being current. Worth it: the alternative is a table that drifts per corridor and a policy question nobody can answer without a spreadsheet.
+  </Accordion>
+
+  <Accordion title="4 · What is maker-checker, and what is the usual way it fails?" icon="user-check">
+    **Answer.** Two distinct people must approve an action: one initiates (maker), another approves (checker).
+
+    It fails when **the same person can do both**. The check is trivial to write and is the single most common way four-eyes is quietly defeated in practice, usually via a shared service account or an admin override added under time pressure.
+
+    **Follow-up: should four-eyes apply everywhere?** No, and this is the better answer. Arc applies it **per queue**: sanctions decisions need two approvers, routine KYC document review does not. Applying it everywhere sounds safer and is worse: it exhausts the reviewers who need to be sharp on the decisions that actually carry risk.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Screening
+
+<AccordionGroup>
+  <Accordion title="5 · Why fuzzy matching rather than exact string comparison?" icon="magnifying-glass">
+    **Answer.** Exact matching is useless. Transliteration, name order, initials, diacritics and ordinary typos all defeat it, and defeating it deliberately is trivial.
+
+    Arc uses **Jaro–Winkler** over normalised names, checked against primary names and aliases, with a 0.9 threshold.
+
+    **Follow-up: why Jaro–Winkler specifically?** It weights **prefix agreement** more heavily than general edit distance, which suits personal names: people mistype and abbreviate the ends of names far more than the beginnings. "Vorlan Krestomayer" and "V. Krestomayer" score high; two unrelated names of similar length do not.
+  </Accordion>
+
+  <Accordion title="6 · What is the real design problem in sanctions screening?" icon="triangle-exclamation">
+    **Answer.** **False positives**, not false negatives.
+
+    A screener tuned to catch everything flags everyone. The cost is not computational: it is a review queue growing faster than analysts can clear it, and a team that starts approving on autopilot. At that point the control exists on paper and not in practice.
+
+    **Follow-up: so how do you handle them?** Every match carries its score, the matched alias, the programme and the entity type. Every hit produces an **audit trail entry** whether cleared or escalated. Clearing a false positive is a recorded decision by a named actor, not a silent dismissal, which is what makes the queue's throughput a measurable thing rather than a vibe.
+  </Accordion>
+
+  <Accordion title="7 · When should a beneficiary be screened?" icon="clock">
+    **Answer.** At creation **and at every use**. Sanctions lists change; a beneficiary added six months ago may not be clear today.
+
+    Screening only at creation is a control that decays silently from the moment it runs.
+
+    **Follow-up: does that not add latency to every transfer?** Yes, a few milliseconds against an in-memory index. The cost is trivial and the alternative is a control with an expiry date nobody tracks.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Rules
+
+<AccordionGroup>
+  <Accordion title="8 · Describe structuring detection. What is the naive version's flaw?" icon="layer-group">
+    **Answer.** Structuring is splitting transfers to stay under a reporting threshold. Arc's rule: three or more transfers within a **1,500 bp band** below the €10,000 threshold, inside a 7-day window.
+
+    The naive version watches for amounts just under the threshold: €9,999, €9,950. Nobody structuring does that; it is conspicuous. They send €8,400, €8,900, €9,100.
+
+    **The band matters more than the threshold.** A rule that only catches the obvious case catches nobody.
+
+    **Follow-up: what are the other four families?** Velocity (count *and* total value in a rolling window: count alone misses one large transfer, value alone misses a hundred small ones), unusual corridor, round-tripping (detected on the counterparty graph, because no single transfer in a round trip looks unusual), and counterparty concentration (in basis points of volume, so it scales with account size).
+  </Accordion>
+
+  <Accordion title="9 · Why must a compliance verdict carry reasons and evidence rather than a score?" icon="file-lines">
+    **Answer.** Because a decision a human cannot reconstruct cannot be defended to a regulator, appealed by a customer, or debugged by an engineer.
+
+    Arc's `ComplianceVerdict` carries the decision, the reasons, the risk score, any sanctions matches, and the rule hits: each with the **specific prior transfers** that triggered it.
+
+    **Follow-up: what is the failure mode of score-only?** An analyst sees 74 and has no basis for agreeing or disagreeing, so they defer to the machine. The control becomes a rubber stamp with an audit trail that records nothing but the rubber stamp.
+  </Accordion>
+
+  <Accordion title="10 · Where do the thresholds live?" icon="sliders">
+    **Answer.** In a single `RuleThresholds` object with documented defaults, injected into the engine.
+
+    Rules that hard-code their numbers cannot be tuned per jurisdiction, and tuning per jurisdiction is not optional in this domain, because the reporting threshold that matters in Germany is not the one that matters in Kenya.
+
+    **Follow-up: who changes them?** Compliance, not engineering. That is the actual argument for externalising them: the people who own the policy should be able to change the policy without a deployment.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## The framing question
+
+<div className="arc-claim">
+The strongest answer available in this domain is that compliance controls are **product constraints, not obstacles**. A corridor operator's licence to operate is the product. An engineer who describes compliance as friction to be minimised is describing a system that will eventually be shut down by a regulator.
+</div>
+
+The honest version, worth being able to say: these controls are expensive, they generate false positives, they slow things down, **and** they are the reason the business is allowed to exist. Both halves.
+
+---
+
+## Questions to ask them back
+
+- Is screening blocking, or does a transfer proceed while it runs?
+- How many false positives does your sanctions screener produce per week, and who clears them?
+- Can compliance change a rule threshold without an engineering deployment?
+- Where is the audit trail for a cleared alert, and how long is it retained?
+
+<CardGroup cols={2}>
+  <Card title="Risk and compliance architecture" icon="shield" href="/architecture/compliance">
+    The implementation these questions are drawn from.
+  </Card>
+  <Card title="Test yourself" icon="circle-question" href="/practice/quiz-ledger">
+    The two quizzes cover the ledger and the settlement path.
+  </Card>
+</CardGroup>

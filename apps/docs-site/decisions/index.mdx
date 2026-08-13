@@ -1,0 +1,66 @@
+---
+title: "Architecture decisions"
+sidebarTitle: "Overview"
+description: "Numbered decision records: the choice, the context that forced it, the consequences accepted, and the alternatives rejected."
+icon: "gavel"
+---
+
+<span className="arc-eyebrow">Decisions · ADRs</span>
+
+An architecture decision record captures a choice **at the moment it was made**, with the context that made it reasonable and the alternatives that were rejected. Read later, an ADR answers the question every codebase eventually raises: *why on earth is it like this?*
+
+The value is in the parts that are uncomfortable to write. A record listing only the benefits is marketing. Each of these states what the decision costs.
+
+---
+
+## Accepted
+
+<CardGroup cols={2}>
+  <Card title="0001 · Money as integer minor units" icon="calculator" href="/decisions/0001-money-as-integer-minor-units">
+    **Phase 0.** Every monetary value is a `bigint` count of minor units. No floats anywhere, enforced by lint. The decision the rest of the system rests on.
+  </Card>
+  <Card title="0002 · Modular monolith over microservices" icon="cubes" href="/decisions/0002-modular-monolith">
+    **Phase 0.** One deployable, six bounded contexts, boundaries enforced by CI. Reads as microservices; runs with one command.
+  </Card>
+</CardGroup>
+
+---
+
+## Planned
+
+These decisions are made and implemented but not yet written up as records. They are listed so the gap is visible rather than implied.
+
+| # | Decision | Where it currently lives |
+| --- | --- | --- |
+| 0003 | Chain abstraction: one driver interface, deterministic simulator behind it | [The chain layer](/architecture/chain-layer) |
+| 0004 | Saga with compensating actions rather than two-phase commit | [The settlement saga](/architecture/settlement-saga) |
+| 0005 | Idempotency strategy: keys at the rail, the chain, and the API | [The payout that paid twice](/stories/the-payout-that-paid-twice) |
+| 0006 | Transactional outbox for at-least-once delivery | [Contexts and events](/architecture/contexts-and-events) |
+| 0007 | Multi-tenancy model for the partner platform | Phase 7 |
+
+---
+
+## The format
+
+Every record on this site uses the same four sections, and the order is deliberate:
+
+<Steps>
+  <Step title="Context">
+    The forces in play **before** the decision. What made this a question at all? An ADR whose context does not explain why the obvious answer was insufficient is not describing a decision.
+  </Step>
+  <Step title="Decision">
+    What was chosen, stated plainly and in the present tense. One paragraph, not a design document.
+  </Step>
+  <Step title="Consequences">
+    Both directions. What this makes easy, and what it makes hard or impossible. **The costs section is the one that earns the record its place.**
+  </Step>
+  <Step title="Alternatives">
+    What else was considered and specifically why it was rejected. Not strawmen: the version of each alternative its advocate would recognise.
+  </Step>
+</Steps>
+
+<Note>
+ADRs are **immutable once accepted**. A decision that changes gets a new record that supersedes the old one, and the old one stays in place marked as superseded.
+
+Editing an accepted ADR destroys the only thing it was for: the record of what was known and believed at the time. The same reasoning as the ledger's append-only entries: the record of what happened stays separate from the record of what was later thought better.
+</Note>

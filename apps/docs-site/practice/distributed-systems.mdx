@@ -1,0 +1,159 @@
+---
+title: "Distributed systems"
+description: "Sagas versus two-phase commit, the transactional outbox, idempotency, at-least-once delivery, and compensation ordering."
+icon: "network-wired"
+---
+
+<span className="arc-eyebrow">Practice · question bank · answer out loud first</span>
+
+Twelve questions on the parts of Arc that would be identical if the six contexts were six deployables.
+
+---
+
+## Sagas
+
+<AccordionGroup>
+  <Accordion title="1 · Why a saga rather than a distributed transaction?" icon="rotate-left">
+    **Answer.** Because there is no transaction manager spanning a Postgres ledger, a blockchain, and M-Pesa, and there never will be. Two-phase commit requires every participant to support prepare/commit and to hold locks until the coordinator decides. A foreign bank does not offer that, and a blockchain fundamentally cannot.
+
+    So: run steps forward, and on failure run compensations backward. Not atomicity: **eventual consistency with an explicit, auditable unwind**.
+
+    **Follow-up: what do you give up?** Isolation. There are intermediate states where money is in-transit and neither fully sent nor fully refunded. Arc makes those states explicit as ledger accounts (`liability.in_transit`) rather than pretending they do not exist.
+  </Accordion>
+
+  <Accordion title="2 · What makes a compensation safe?" icon="shield">
+    **Answer.** It is the reverse of the *exact journal the step posted*: every direction flipped, same accounts, same amounts. Two properties follow: if the original balanced the reversal balances, and the pair nets to zero.
+
+    That matters because the compensation path runs when something has **already gone wrong**. It must not depend on getting fresh logic right under failure; it depends only on arithmetic that was already true.
+
+    **Follow-up: is reversal an involution?** Yes: reversing twice returns the original, and that is asserted by the property suite.
+  </Accordion>
+
+  <Accordion title="3 · Why compensate in reverse order if reversals commute?" icon="arrow-left">
+    **Answer.** Two reasons, and only one is about the ledger.
+
+    First: **external effects are not commutative.** The rail recall must happen before the settlement is unwound, or you risk recovering funds you are simultaneously paying out.
+
+    Second: **each reversal journal must describe the step it actually undoes.** Forward order produces a journal labelled "refund sender" containing the *settlement* entries: a balanced ledger with a false audit trail.
+
+    **Follow-up: how did you find that?** Mutation testing. Forward order passed all sixteen tests, because balance cannot detect ordering. Two tests on reversal order and account pairing were added. [The scenario](/stories/the-journal-that-balanced-and-lied).
+  </Accordion>
+
+  <Accordion title="4 · What happens when a compensation itself fails?" icon="triangle-exclamation">
+    **Answer.** The saga returns `compensation_failed` and stops, rather than retrying blindly into a partially-unwound state.
+
+    That is a distinct terminal state from `compensated` precisely so it can be alerted on: it is the one outcome that needs a human.
+
+    **Follow-up: what should happen next?** An operational case with the completed and failed compensation steps attached, so someone can finish the unwind manually with full context. In Arc that case management is Phase 8 and does not exist yet, which is a known gap, not a solved problem.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Messaging
+
+<AccordionGroup>
+  <Accordion title="5 · What problem does a transactional outbox solve?" icon="inbox">
+    **Answer.** Writing state and publishing an event are two operations. If they are not atomic there is a window where one happens and the other does not.
+
+    Publish *after* commit: the process dies, state lands, the event never fires, and nothing is logged as an error because nothing errored. Publish *before* commit: subscribers act on something that then rolls back.
+
+    The outbox writes the event to a table **in the same transaction** as the state change. They land together or not at all. A separate dispatcher then delivers.
+
+    **Follow-up: what does that cost?** Duplicate delivery: the dispatcher may crash after delivering but before marking processed. That is the right trade, because duplicates are solvable with idempotency and lost events are not solvable at all.
+  </Accordion>
+
+  <Accordion title="6 · Distinguish at-least-once delivery from effectively-once processing." icon="repeat">
+    **Answer.** **Delivery** is the transport's guarantee: the event will arrive, possibly more than once. **Processing** is the handler's guarantee: the effect happens once regardless of how many times it arrives.
+
+    Exactly-once delivery is not achievable across a network. Effectively-once processing is, by tracking which events a handler has already completed and skipping repeats.
+
+    **Follow-up: where is that state kept?** With the handler, keyed by event id, and updated in the same transaction as whatever the handler did. Otherwise you have moved the atomicity problem rather than solved it.
+  </Accordion>
+
+  <Accordion title="7 · What do you do with a poison event?" icon="skull">
+    **Answer.** Park it for review. Not drop it, not retry forever.
+
+    Retrying forever takes the queue down with it: one malformed event blocks every event behind it. Dropping it takes the evidence with it, and you find out weeks later that a class of event silently vanished.
+
+    Parking keeps the queue moving **and** keeps the event for a human.
+
+    **Follow-up: how do you know it is poison rather than a transient failure?** A retry count with a threshold. The distinction is empirical, not knowable in advance, which is why the threshold is configuration rather than a constant.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Idempotency
+
+<AccordionGroup>
+  <Accordion title="8 · A payout request times out. Retry or not?" icon="clone">
+    **Answer.** Retry, but only because there is an idempotency key.
+
+    A timeout is not a failure. It is **the absence of information** about whether it succeeded. Without a key both options are wrong: retry risks paying twice, giving up risks stranding funds the rail already sent.
+
+    With a key derived from the transfer id, resubmitting returns the original receipt rather than paying twice. The rail becomes responsible for recognising a repeat, because the rail is the only party that knows whether it already acted.
+
+    **Follow-up: why not query first?** The query can time out too, and there is a window between "not found" and the retry landing. You have narrowed the race, not closed it, and narrow races are harder to reproduce and just as expensive.
+  </Accordion>
+
+  <Accordion title="9 · Why not deduplicate on amount plus beneficiary?" icon="equals">
+    **Answer.** Because a customer who genuinely sends their sister the same amount twice in one day gets their second transfer silently swallowed.
+
+    Deduplicating on **data** breaks on legitimate repetition. Deduplicating on **identity of intent**: a key the caller supplies: does not, because only the caller knows the two requests are the same instruction.
+
+    **Follow-up: which layers need keys?** Every layer that can retry: the public API (client-supplied header), the rail adapter (transfer id), the chain broadcast (transfer id: a rebroadcast must return the original hash), and event handlers (event id).
+  </Accordion>
+
+  <Accordion title="10 · Why is retryability a field on the error rather than a decision at the call site?" icon="code-branch">
+    **Answer.** Because only the rail adapter understands the rail's semantics, and it should decide once, in one place.
+
+    A **timeout** is retryable: the ambiguity is exactly why idempotency keys exist. A **rejection** is not: retrying `account_closed` just fails again, more slowly, while the customer waits.
+
+    The alternative, a regex on the error message at the call site, is duplicated logic that drifts, in the code path that runs when things are already going wrong.
+
+    **Follow-up: what if you get it wrong?** Marking a rejection retryable wastes time and delays the unwind. Marking a timeout non-retryable strands the transfer. The second is worse, so the default when genuinely unsure should be retryable, which is only safe *because* the key exists.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Boundaries
+
+<AccordionGroup>
+  <Accordion title="11 · The saga needs a ledger reservation synchronously. How, without importing the ledger?" icon="plug">
+    **Answer.** Dependency inversion. Movement defines `LedgerPort` as an interface **it owns**; the ledger implements it; the adapter lives at the composition root outside every context's `src`.
+
+    Movement imports its own port type, never the ledger. The boundary check stays green while the call stays synchronous.
+
+    **Follow-up: why not use an event?** Because the saga needs the answer before the next step runs. A reservation must be accepted or rejected before proceeding, or the saga has no idea what to compensate. Events are the default; ports exist for exactly the cases where the caller cannot wait.
+  </Accordion>
+
+  <Accordion title="12 · Your architecture rule is enforced in CI and green. Is it working?" icon="shield-halved">
+    **Answer.** Unknown until you break it on purpose.
+
+    Arc's `dependency-cruiser` rule caught relative imports and **silently skipped** package-name imports: `@arc/ledger` resolves through `node_modules` to a `dist` path that does not exist until after a build, so the edge was never added to the graph and the rule never evaluated.
+
+    Not a failure. A rule that **did not apply**, which is worse, because a rule that errors gets fixed and a rule that quietly does nothing gets trusted.
+
+    **Follow-up: what is the fix?** A second layer with a different failure mode: ESLint `no-restricted-imports`, which matches on the specifier string and resolves nothing, so build order is irrelevant to it. Both probes verified to fire. [The scenario](/stories/the-boundary-that-wasnt).
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Questions to ask them back
+
+- What is your delivery guarantee, and where is the idempotency enforced?
+- What happens to an event whose handler keeps failing?
+- Is there a state in your system where money is neither sent nor refunded? What is it called, and can you query how much is in it right now?
+- Have you ever deliberately broken your CI rules to check they fire?
+
+<CardGroup cols={2}>
+  <Card title="Next: chain and settlement" icon="link" href="/practice/chain-and-settlement">
+    Finality, reorgs, and why the fastest chain settled last.
+  </Card>
+  <Card title="Test yourself" icon="circle-question" href="/practice/quiz-settlement">
+    Twelve questions on the saga, rails and chains.
+  </Card>
+</CardGroup>

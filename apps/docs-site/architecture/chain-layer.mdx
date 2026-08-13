@@ -1,0 +1,243 @@
+---
+title: "The chain layer"
+description: "One driver interface, five chains with genuinely different physics, and a deterministic simulator that reproduces the same reorgs every run."
+icon: "link"
+---
+
+<span className="arc-eyebrow">Architecture · the core</span>
+
+Arc settles the middle leg of a corridor transfer on a blockchain. Which blockchain is a decision made **per transfer**, not wired into the system, and that is what "chain-agnostic" has to mean if it is to mean anything.
+
+This lives in `packages/chain` rather than in a service, because it is a shared primitive: the movement context needs it to settle, and the test suite needs it to inject failures.
+
+---
+
+## The seam
+
+```ts
+interface ChainDriver {
+  broadcast(...): Promise<TxHash>;
+  getTransaction(hash): Promise<ChainTransaction | undefined>;
+  getConfirmations(hash): Promise<number>;
+  estimateFee(...): Promise<Money>;
+  head(): Promise<Block>;
+  subscribe(handler: (event: ChainEvent) => void): Unsubscribe;
+}
+```
+
+Six methods. Everything upstream codes against this interface, so swapping the simulator for a real RPC client, or an Anvil node, or a testnet, is a matter of writing another implementation, not of touching the saga.
+
+<div className="arc-claim">
+Nothing in the movement context knows it is talking to a simulator. That is the test of whether an abstraction is real: the code above it cannot tell what is below it.
+</div>
+
+---
+
+## Five chains that behave differently
+
+This is where chain-agnosticism earns its keep. If all chains behaved the same, the abstraction would be decoration.
+
+| Chain | Block time | Finality depth | Settlement window | Character |
+| --- | --- | --- | --- | --- |
+| Solana | 400 ms | 32 | ~13 s | Fastest; highest drop rate (expiry, not eviction) |
+| Base | 2 s | 10 | 20 s | The default for speed-sensitive transfers |
+| Tron | 3 s | 19 | 57 s | Cheap; the default when fee dominates |
+| Ethereum | 12 s | 12 | 144 s | Slow blocks, shallow finality |
+| Polygon | 2 s | 128 | **256 s** | Fast blocks, deepest reorgs, settles last |
+
+**Polygon has blocks six times faster than Ethereum and settles nearly twice as slowly.** Fast blocks that are individually less secure need more of them to reach equivalent confidence.
+
+<Note>
+This is the single most useful thing the chain layer teaches, and it is the subject of [The fastest chain that settled last](/stories/the-fastest-chain-that-settled-last). A system that models chains as "block time" gets this exactly backwards, and would route high-value transfers to the slowest-settling chain in the set while believing it had picked the fastest.
+</Note>
+
+Failure rates are per-chain too, not uniform noise: Solana has the highest drop rate, Polygon the deepest reorgs.
+
+### Solana is the one that breaks the EVM assumptions
+
+Four of the five chains are close enough to each other that a single mental model covers them: a global mempool, gas auctions, probabilistic finality by block depth. **Solana is not**, and it is the most useful chain in the set precisely because it forces the abstraction to be genuine rather than an EVM adapter with the names changed.
+
+<AccordionGroup>
+  <Accordion title="There is no global mempool to be evicted from" icon="inbox" defaultOpen>
+    Ethereum-family chains hold pending transactions in a mempool that every node gossips. A transaction sits there until it is included, replaced, or evicted under pressure.
+
+    Solana forwards transactions directly to the current and upcoming slot leaders rather than pooling them. Under congestion a leader **drops** what it cannot schedule instead of queueing it, and there is no shared buffer that later reconsiders it.
+
+    The practical consequence for a payments business: a Solana transaction that does not land is simply gone, and it is gone quickly. There is no "still pending, might confirm later" limbo of the kind an EVM chain produces.
+  </Accordion>
+
+  <Accordion title="Transactions expire, which is why the drop rate is highest" icon="hourglass-end">
+    A Solana transaction carries a recent blockhash and is only valid for a bounded window after it, on the order of a minute. Miss that window and the transaction is **permanently invalid**, not delayed.
+
+    This is a genuinely different failure mode from EVM eviction, and it is a better one:
+
+    | | EVM eviction | Solana expiry |
+    | --- | --- | --- |
+    | After the failure the transaction is | Possibly still in someone's mempool | Definitively invalid |
+    | Can it land later, unexpectedly? | **Yes** | No |
+    | Safe to re-sign and resubmit? | Only with the same nonce, carefully | Yes, once expired |
+
+    That "possibly still out there" column is what makes EVM retries dangerous and idempotency keys mandatory. Solana converts an ambiguous timeout into a definite answer, which is worth a great deal to a saga that has to decide whether to compensate.
+
+    Arc models this by giving Solana the highest drop rate in the set. The **frequency** is worse and the **ambiguity** is better, and those are different things.
+  </Accordion>
+
+  <Accordion title="Fees are priced, not auctioned" icon="tag">
+    An EVM chain runs a blind auction: bid too low and you wait, bid too high and you overpay, and the clearing price moves block to block.
+
+    Solana charges a small base fee per signature plus an optional priority fee, expressed as a price per unit of compute. Fees are lower and far more **predictable**, which matters more than the headline cost for a business quoting a price to a customer before it has broadcast anything.
+
+    Arc's quote engine takes a chain fee estimate at quote time. On Ethereum that estimate can be materially stale thirty seconds later. On Solana it usually is not, and that difference is worth more to the quote than the absolute fee level.
+  </Accordion>
+
+  <Accordion title="Finality is a commitment level, not a block count" icon="layer-group">
+    Solana exposes progressive commitment: a transaction is processed, then confirmed once a supermajority has voted on its block, then finalized once enough confirmed blocks are rooted on top.
+
+    Roughly 32 slots at 400ms gets you to finalized, hence the ~13 second window in the table. The intermediate `confirmed` level arrives far sooner and is what most consumer applications actually use.
+
+    <div className="arc-gap">
+    Arc waits for the finalized equivalent and does not currently expose the intermediate level. Using `confirmed` would cut the Solana settlement window to roughly a second, and it would mean crediting a beneficiary against a state that is very unlikely, but not certain, to persist. That is a credit decision, and Arc's position is that a credit decision should be [modelled as one](/primer/settlement-and-finality) rather than absorbed silently by a lower commitment level.
+    </div>
+  </Accordion>
+</AccordionGroup>
+
+<div className="arc-claim">
+This is why the driver interface has `getConfirmations` rather than `getBlockDepth`, and why finality depth is configuration per chain rather than a constant. "Confirmations" is an abstraction over a vote count on Solana and a block count on Ethereum, and the saga above it does not need to know which.
+</div>
+
+---
+
+## Transaction states, and the distinction that matters
+
+```mermaid
+stateDiagram-v2
+    [*] --> pending: broadcast
+    pending --> included: mined into a block
+    pending --> dropped: evicted from mempool
+    included --> confirmed: finality depth reached
+    included --> failed: mined but reverted
+    included --> pending: reorg
+    confirmed --> [*]
+    failed --> [*]
+    dropped --> [*]
+```
+
+<Columns cols={2}>
+  <div>
+    **`failed`**
+
+    Mined, executed, reverted. **Consumed gas.** The fee is spent and irrecoverable.
+  </div>
+  <div>
+    **`dropped`**
+
+    Never made it into a block. Cost nothing.
+  </div>
+</Columns>
+
+<div className="arc-claim">
+These are different terminal states and the difference is load-bearing. Compensating for a failed transaction must **not** reverse the gas expense: the gas was really spent, and reversing it produces a balanced ledger that misstates reality. Arc's saga deliberately does not track the network-fee journal for exactly this reason.
+</div>
+
+The `ChainEvent` union covers `block | included | confirmed | failed | dropped | reorg`. The `reorg` event carries `revertedTransactions`, so a consumer knows precisely what to undo without diffing state itself.
+
+---
+
+## Determinism
+
+The whole simulator rests on one small file: **mulberry32** with an FNV-1a seed hash. Tiny, dependency-free, and identical across runs and platforms.
+
+<div className="arc-gap">
+This is the only file in the repository permitted float arithmetic, with a scoped `eslint-disable` and a written justification. It is bit-mixing on a 32-bit state, not money, and nothing it produces becomes an amount without conversion to `bigint` minor units first.
+</div>
+
+The design decision that makes determinism actually hold is subtler than seeding the PRNG:
+
+<Steps>
+  <Step title="The outcome is decided at broadcast time, not at inclusion">
+    Whether a transaction will be dropped, will revert, and how long it will be delayed are all rolled from the seeded RNG **when it enters the mempool**.
+
+    If those rolls happened at inclusion, the results would depend on the order in which transactions were later queried, and a seeded run would stop being reproducible the moment a test read state in a different order.
+  </Step>
+  <Step title="Broadcast is idempotent by key">
+    Rebroadcasting with the same idempotency key returns the original hash. This matches real client behaviour and matches Arc's own retry semantics: a retry that produced a second on-chain transaction would be a duplicate payment.
+  </Step>
+  <Step title="Block production drains the mempool with a bounded loop">
+    Delayed transactions are pushed to the back rather than dropped, modelling a low-fee transaction waiting its turn. A `considered` counter bounds the loop so a mempool full of delayed transactions cannot spin forever.
+  </Step>
+</Steps>
+
+---
+
+## Reorgs, two ways
+
+Rollback splices blocks off the chain, clears each affected transaction's block height, resets its status to `pending`, and `unshift`s it to the **front** of the mempool so it is re-mined promptly. It returns the reverted hashes.
+
+It can be triggered two ways, and having both is the point:
+
+<Columns cols={2}>
+  <div>
+    **Probabilistically, during `advance()`**
+
+    Before each block, a roll against the chain's reorg rate: guarded so it cannot reorg past genesis. Realistic, and reproducible under a seed.
+  </div>
+  <div>
+    **Deterministically, via `forceReorg(depth)`**
+
+    The chaos suite needs a reorg at a *precise* moment. Probability-tuning a test until it happens to reorg is flaky and proves nothing.
+  </div>
+</Columns>
+
+<div className="arc-claim">
+A seeded run reproduces the same blocks, reorgs and transaction outcomes every time, and a reorg rolls a mined transaction back to `pending` before it is re-mined. Both are asserted by test.
+</div>
+
+---
+
+## Chain selection {#chain-selection}
+
+`selectChain` scores each available chain on settlement time and fee, weighted by a 0–100 `speedPreference`:
+
+```text
+score = normalise(settlementTime) × speedWeight
+      + normalise(fee)            × (100 − speedWeight)
+```
+
+High speed preference picks Base. Low speed preference picks Tron. Both terms are normalised into comparable ranges before weighting, because adding seconds to gas units is meaningless otherwise.
+
+<div className="arc-gap">
+Deliberately simple. Real routing would also weigh **liquidity depth** on the destination pair and **current congestion**, both of which move faster than the static characteristics here. The interface has room for both; the implementation does not have them yet.
+</div>
+
+This is what chain-agnostic settlement means concretely: the corridor evaluates per transfer instead of being wired to one chain, and swapping in a better scoring function does not touch the saga.
+
+---
+
+## How the saga uses it
+
+The `settle` step does three things in a specific order, and the third is the one people skip:
+
+<Steps>
+  <Step title="Broadcast">
+    With an idempotency key derived from the transfer, so a retry cannot double-send.
+  </Step>
+  <Step title="Advance the chain">
+    Via an injected `advanceChain` function: the simulator has no wall clock, so time is something the caller supplies. This is also what makes a full settlement testable in milliseconds.
+  </Step>
+  <Step title="Re-read the transaction and require `final`">
+    **Not** "no error was thrown". Checking `final` is the difference between confirming settlement and merely confirming submission, and code that does the latter looks completely correct until the day a transaction is dropped.
+  </Step>
+</Steps>
+
+<div className="arc-gap">
+The `settle` step's compensation is a **ledger-level** unwind representing funds recovered from the settlement partner. Nothing un-sends a confirmed on-chain transaction. That limitation is real, and it is stated here rather than papered over: an architecture that implies otherwise is lying about what a blockchain is.
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Next: the settlement saga" icon="rotate-left" href="/architecture/settlement-saga">
+    Where the chain layer, the rails and the ledger are assembled into a transfer.
+  </Card>
+  <Card title="Settlement and finality" icon="clock" href="/primer/settlement-and-finality">
+    The domain background, if the finality-depth table above raised questions.
+  </Card>
+</CardGroup>

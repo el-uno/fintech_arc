@@ -1,0 +1,154 @@
+---
+title: "The cut-off that cost a day"
+description: "The payment was submitted at 16:00 on Thursday. It arrived Tuesday. Nothing failed."
+icon: "clock"
+---
+
+<span className="arc-eyebrow arc-eyebrow--amber">Story · time and money · 4 min</span>
+
+<div className="arc-symptom">
+An invoice payment is submitted at **16:00 UTC on Thursday**. The rail's cut-off is 15:00. The estimate shown to the customer says "arrives within 1 business day".
+
+It arrives **Tuesday**. Nothing failed, nothing was retried, no error was logged, and the rail behaved exactly as documented.
+</div>
+
+---
+
+## The arithmetic nobody does
+
+Missing a cut-off feels like being an hour late. It is not. The delay **compounds** in a way that is obvious once written down and invisible until then:
+
+<Steps>
+  <Step title="You miss the window">
+    16:00, cut-off was 15:00. One hour late.
+  </Step>
+  <Step title="The payment queues to the next opening">
+    Not to 15:00 tomorrow: to the next time the rail **opens**. That is the following business morning.
+  </Step>
+  <Step title="Then it takes the rail's normal latency">
+    The queue position is not a head start. The T+2 clock starts when the batch is picked up, not when the payment was submitted.
+  </Step>
+  <Step title="Weekends and holidays do not count">
+    Thursday 16:00 → Friday's batch → T+2 across a weekend → **Tuesday**.
+  </Step>
+</Steps>
+
+<div className="arc-claim">
+Missing a batch rail's cut-off by an hour costs a **day**: the queued payment starts from the next opening *and then* takes the rail's normal latency. The two delays add; they do not overlap.
+</div>
+
+Sixty minutes of lateness produced ninety-six hours of delay. Every step is correct behaviour.
+
+---
+
+## Why estimates are usually wrong here
+
+The estimate said "within 1 business day", which is the rail's *latency*: its documented, headline number. Latency is what the rail publishes because latency is what the rail controls.
+
+The customer experiences **submission to arrival**, which is:
+
+```text
+wait_for_next_open + rail_latency + non_business_days
+```
+
+Two of those three terms are outside the rail's control and outside its published figure. A system that shows the customer the rail's latency is showing them a number that is true and irrelevant.
+
+---
+
+## How Arc models it
+
+Rails carry their windows as data, not as a comment:
+
+| Rail | Currency | Instant | Cut-off (UTC) | Latency |
+| --- | --- | --- | --- | --- |
+| `sepa_instant` | EUR | yes | n/a | seconds |
+| `sepa_credit` | EUR | no | 15:00 | next business day |
+| `faster_payments` | GBP | yes | n/a | seconds |
+| `nip` | NGN | yes | n/a | seconds |
+| `mpesa` | KES | yes | n/a | seconds |
+| `eft` | ZAR | no | 14:00 | T+2 |
+
+Two functions do the work:
+
+```ts
+isRailOpen(rail, at): boolean
+nextSettlementTime(rail, submittedAt): Date
+```
+
+`isRailOpen` returns `true` unconditionally for instant rails: they have no window, and special-casing that once means every caller downstream stops thinking about it.
+
+`nextSettlementTime` does the compounding arithmetic properly: find the next opening, then add the rail's latency, then skip non-business days.
+
+<div className="arc-claim">
+**That compounding is asserted by a test that checks the exact arithmetic**, not assumed. A test that only checked "later than submission" would pass for an implementation that adds one hour, which is precisely the bug this exists to prevent.
+</div>
+
+---
+
+## The product decision this forces
+
+Once the real arrival time is computable rather than estimated, a genuine choice appears, and it only appears because the arithmetic is honest.
+
+<Columns cols={2}>
+  <div>
+    **`sepa_credit`**
+
+    Cheaper. Cut-off at 15:00. Fine for a payment with a week of runway.
+  </div>
+  <div>
+    **`sepa_instant`**
+
+    More expensive, €100k cap, always open. Necessary for an invoice due tomorrow.
+  </div>
+</Columns>
+
+At 14:00 the cheap rail costs an hour of latency. At 16:00 the same choice costs four days. **The right rail depends on the clock**, which means rail selection cannot be a static per-currency mapping, and a system whose `nextSettlementTime` is approximate cannot make the decision at all.
+
+<div className="arc-gap">
+Arc currently maps currency to rail statically, with the cut-off arithmetic available but not yet driving selection. Wiring deadline-aware rail choice belongs with the transfer API. Stating it here rather than implying the capability exists.
+</div>
+
+---
+
+## The related trap: T+2 is not "two days"
+
+`eft` is T+2. That is two **settlement** days, and the count starts from the settlement date, which is itself determined by the cut-off.
+
+Submitted Friday at 15:00, one hour past the 14:00 cut-off:
+
+```text
+Friday 15:00   missed cut-off
+Monday         next opening → settlement date
+Tuesday        T+1
+Wednesday      T+2 → funds available
+```
+
+Five calendar days for a payment that missed its window by sixty minutes. Add a public holiday in either jurisdiction and it is six or seven, and the two jurisdictions have **different** holiday calendars, which is a detail that reliably surprises people building their first corridor.
+
+---
+
+## The lesson
+
+<Steps>
+  <Step title="Business time is not wall-clock time">
+    Any system touching banking rails needs a business-calendar concept as a first-class citizen. Retrofitting one later means auditing every date calculation in the codebase.
+  </Step>
+  <Step title="Delays compound; they do not overlap">
+    "One hour late" and "one hour of delay" are different quantities. Assert the exact arithmetic, because a test checking "later than before" passes the naive implementation.
+  </Step>
+  <Step title="Show the customer arrival time, not rail latency">
+    The published number is true and answers a question nobody asked. Compute what they actually experience.
+  </Step>
+  <Step title="Windows belong in data">
+    A cut-off in a comment is a cut-off that will be wrong after the next daylight-saving change. In a table, it can be tested.
+  </Step>
+</Steps>
+
+<CardGroup cols={2}>
+  <Card title="The settlement saga" icon="rotate-left" href="/architecture/settlement-saga">
+    Rails, cut-offs, caps and failure profiles in context.
+  </Card>
+  <Card title="Enterprise payout" icon="building" href="/flows/enterprise-payout">
+    Where this decision is worth the most: an invoice due Friday.
+  </Card>
+</CardGroup>

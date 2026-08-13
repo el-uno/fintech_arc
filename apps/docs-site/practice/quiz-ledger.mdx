@@ -1,0 +1,119 @@
+---
+title: "Quiz: the ledger"
+sidebarTitle: "Quiz · ledger"
+description: "Twelve questions on double-entry, exactness and multi-currency. Several have a plausible wrong answer that is the actual point."
+icon: "circle-question"
+---
+
+<span className="arc-eyebrow">Quiz · 12 questions · ~15 minutes</span>
+
+Commit to an answer before opening each one. Several questions have a confident-sounding wrong answer written into the options: those are the questions worth getting wrong now rather than in an interview.
+
+<Note>
+Scoring: **10–12** you can defend the ledger design. **7–9** solid, revisit the ones you missed. **Below 7** re-read [the ledger](/architecture/ledger) before the question bank.
+</Note>
+
+---
+
+<AccordionGroup>
+  <Accordion title="1 · A journal has one entry: Dr liability.customer.va_1.EUR 100.00. Valid?" icon="circle-question">
+    **No.** `assertBalanced` requires **at least two entries**: one entry can never balance.
+
+    It is the first of three checks, before positivity and before per-currency balance, because it is the cheapest and most fundamental.
+  </Accordion>
+
+  <Accordion title="2 · Dr EUR 100.00 and Cr USDC 108.00 at the prevailing rate. Balanced?" icon="circle-question">
+    **No.** Balance is computed **per currency, independently**. EUR has a debit of 100.00 and no credit; USDC has a credit of 108.00 and no debit. Both currencies fail.
+
+    The plausible wrong answer is "yes, if the rate is right", and that is exactly the reasoning the design rejects. Offsetting across currencies means adding quantities of different things, and no rate makes that an identity at the moment of posting.
+
+    A conversion needs **four** legs, bridged by the FX position accounts.
+  </Accordion>
+
+  <Accordion title="3 · What is the balance tolerance?" icon="circle-question">
+    **There is none.** Debits equal credits exactly, per currency.
+
+    This is why money is an integer count of minor units. With floats an epsilon would be unavoidable, and a ledger with an epsilon is not a ledger: "how far off is acceptable?" has no defensible answer and the drift grows with volume.
+  </Accordion>
+
+  <Accordion title="4 · A €10 debit hits asset.float.bank.EUR and liability.customer.va_1.EUR. Same direction of effect?" icon="circle-question">
+    **No: opposite.** It **raises** the asset and **lowers** the liability.
+
+    Debits increase assets and expenses; credits increase liabilities, equity and revenue. `entrySign()` reads the `NORMAL_BALANCE` table and returns `+1n` or `-1n` accordingly.
+
+    That table exists in exactly one place. Duplicated, the copies eventually disagree and the ledger silently mis-signs balances.
+  </Accordion>
+
+  <Accordion title="5 · An entry was posted with the wrong amount. How do you fix it?" icon="circle-question">
+    **Post a reversing journal, then post the correct one.** Never edit, never delete.
+
+    A `BEFORE UPDATE OR DELETE` trigger enforces this at the database level: `ledger_entry is append-only: post a reversing journal instead`.
+
+    The record of what happened stays separate from the record of what was meant to happen, which is the whole content of an audit trail.
+  </Accordion>
+
+  <Accordion title="6 · A customer has €1,000 posted and a €250 active hold. What can they spend?" icon="circle-question">
+    **€750.** `available = posted − reserved`, where `reserved` is the sum of **active** holds only: released and captured holds do not count.
+
+    Showing them `posted` would let them spend money already committed elsewhere.
+  </Accordion>
+
+  <Accordion title="7 · A journal fails the overdraft check. What is in the database?" icon="circle-question">
+    **Nothing.** Validation is complete before anything is written.
+
+    The order is deliberate: balance (pure, no I/O), then account resolution, then overdraft. A rejection leaves no trace: there is no path that writes some entries and then discovers a problem.
+
+    The property test for this is "rejection is total": entry count is identical before and after.
+  </Accordion>
+
+  <Accordion title="8 · Why can the overdraft floor never be positive?" icon="circle-question">
+    **Because it is how far *below* zero an account may go**, expressed as a non-positive value. Zero means never overdrawn; a negative value models an intraday credit line.
+
+    A positive floor would mean an account cannot go below a positive balance, which is a different concept entirely. `CHECK (overdraft_floor <= 0)` enforces it.
+
+    Customer accounts are 0. So is `liability.in_transit`: driving it negative would mean paying out money nobody put in.
+  </Accordion>
+
+  <Accordion title="9 · Someone opens psql and runs an UPDATE that leaves a journal unbalanced. Does it commit?" icon="circle-question">
+    **No, twice over.** The append-only trigger blocks the `UPDATE` outright. And even via valid inserts, the balance constraint trigger is `DEFERRABLE INITIALLY DEFERRED`: it runs at `COMMIT`, so a transaction leaving any journal unbalanced in any currency cannot commit.
+
+    This is deliberate duplication with the application check. An invariant depending on every future developer using the right class is a convention, and conventions erode.
+  </Accordion>
+
+  <Accordion title="10 · A 1.5% fee on €33.33 is €0.49995. Where does 0.00995 go?" icon="circle-question">
+    **To `revenue.rounding.EUR`, as its own entry.**
+
+    `divRound` returns the rounded value under an explicit mode; `divResidual` returns the exact leftover so it can be posted. The journal balances and the residual becomes a queryable number.
+
+    The plausible wrong answer is "it rounds away", which is an unrecorded transfer of value, executing continuously, that nobody wrote down as policy.
+  </Accordion>
+
+  <Accordion title="11 · Journal J and its reversal are both posted. What are the balances?" icon="circle-question">
+    **Exactly where they started.** Every touched account, to the minor unit.
+
+    Two properties: if J balances, its reversal balances: flipping every direction preserves the equality. And `reverseEntries` is an **involution**: reversing twice returns the original. Both are in the property suite.
+
+    This is why compensation is safe *by construction* rather than by careful coding, which matters because the unwind path runs when something has already gone wrong.
+  </Accordion>
+
+  <Accordion title="12 · Compensation runs forwards instead of backwards. Does the trial balance detect it?" icon="circle-question">
+    **No, and this is the most important answer here.**
+
+    Reversals commute, because addition commutes. The final balances are identical either way. Every assertion about balance passes.
+
+    What breaks is the **audit trail**: a journal labelled "reverse reserve" containing the settlement entries. A balanced ledger describing something that did not happen.
+
+    This was found by mutation testing: forward order passed all sixteen tests. Two tests on reversal order and account pairing were added. **Balance is necessary but not sufficient.** [The scenario](/stories/the-journal-that-balanced-and-lied).
+  </Accordion>
+</AccordionGroup>
+
+---
+
+<CardGroup cols={2}>
+  <Card title="Settlement quiz" icon="circle-question" href="/practice/quiz-settlement">
+    Twelve more, on the saga, rails and chains.
+  </Card>
+  <Card title="Back to the ledger" icon="scale-balanced" href="/architecture/ledger">
+    For anything above that did not land.
+  </Card>
+</CardGroup>

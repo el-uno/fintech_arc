@@ -1,0 +1,185 @@
+---
+title: "The journal that balanced and lied"
+description: "Compensation ran in the wrong order. The ledger balanced perfectly. Sixteen tests passed. The audit trail was fiction."
+icon: "triangle-exclamation"
+---
+
+<span className="arc-eyebrow arc-eyebrow--amber">Story · exactness · this one actually happened · 7 min</span>
+
+<div className="arc-symptom">
+A deliberate defect was introduced into the settlement saga: compensation walking completed steps **forwards** instead of backwards. The full suite was run, expecting failures.
+
+**Sixteen tests. Zero failures.**
+</div>
+
+---
+
+## What was being tested
+
+Arc's central correctness claim is a single sentence:
+
+<div className="arc-claim">
+For every failure at every step of the saga, the ledger ends balanced in every currency and the sender is made whole.
+</div>
+
+The chaos suite exists to check exactly this. It fails each of the five saga steps in turn and asserts the status is `compensated`, the ledger balances in every currency, the sender's balance is precisely what it was, and every intermediate account is back to zero.
+
+That is a strong set of assertions. It was passing. And the code was wrong.
+
+---
+
+## Mutation testing, and why
+
+A test suite is itself untested code. It asserts things about the system; nothing asserts that it would notice if the system broke.
+
+The only way to find out is to break the system on purpose and watch:
+
+| Mutation | Result |
+| --- | --- |
+| Compensation does nothing at all | 6 tests failed ✓ |
+| Reversal doesn't flip direction | 6 tests failed ✓ |
+| **Compensate in forward order** | **0 tests failed** ✗ |
+
+The first two are reassuring. The third is the interesting one, and it took some staring to understand why it passed.
+
+---
+
+## Why forward order still balanced
+
+The saga posts four journals on the way forward:
+
+<Steps>
+  <Step title="reserve">Sender debited €1,000; €989.09 to in-transit, €10.91 to two fee accounts.</Step>
+  <Step title="swap">EUR obligation converted to a USDC asset, bridged by the FX position accounts.</Step>
+  <Step title="settle">USDC out, KES float in.</Step>
+  <Step title="payout">Submitted to the rail, and this is where it fails.</Step>
+</Steps>
+
+Compensation should reverse **settle, then swap, then reserve**. The mutant reversed **reserve, then swap, then settle**.
+
+Every reversal is still the exact inverse of its own journal. Every one still balances on its own. And the final balances are identical either way, because:
+
+<div className="arc-claim">
+Reversals **commute**. Addition commutes. A + B + C = C + B + A, and the ledger is, arithmetically, addition.
+</div>
+
+So every assertion in the suite passed, correctly. The sender's balance was exactly €1,000.00. Every intermediate account was zero. The trial balance was zero in every currency.
+
+The arithmetic was flawless. **The record was false.**
+
+---
+
+## What was actually broken
+
+Each compensating journal is written with a description naming the step it undoes. Run backwards, that description is true. Run forwards, it is not.
+
+<Columns cols={2}>
+  <div>
+    **Correct: backwards**
+
+    ```text
+    J5 "reverse settle"
+       Dr float.chain.USDC
+       Cr fx_position.USDC
+       Dr in_transit.KES
+       Cr float.bank.KES
+
+    J6 "reverse swap"  …
+    J7 "reverse reserve" …
+    ```
+
+    Each journal reverses the step it names.
+  </div>
+  <div>
+    **Mutant: forwards**
+
+    ```text
+    J5 "reverse reserve"
+       Dr float.chain.USDC     ←
+       Cr fx_position.USDC     ←
+       Dr in_transit.KES       ←
+       Cr float.bank.KES       ←
+
+    J6 "reverse swap" …
+    J7 "reverse settle" …
+    ```
+
+    A journal labelled "refund the sender" that contains the **settlement** entries.
+  </div>
+</Columns>
+
+Consider what this means at 3am during an incident. An engineer queries the journals for a failed transfer to understand what happened. They read a journal that says *"reverse reserve: refund sender"* and find entries moving USDC and KES float. Nothing about the record corresponds to what it claims to record.
+
+Or worse, consider an auditor asking to see how a specific customer refund was processed. The refund happened. The money is right. The document describing it is fiction.
+
+---
+
+## Why the ordering rule exists at all
+
+Two independent reasons, and only one of them is about the ledger:
+
+<AccordionGroup>
+  <Accordion title="The rail recall must precede the settlement unwind" icon="clock-rotate-left" defaultOpen>
+    This is an ordering constraint on the **real world**, not on the arithmetic. Unwinding a settlement while a payout may still be in flight at the rail risks recovering funds you are simultaneously paying out.
+
+    Backwards order is the only order in which the external effects are undone in the reverse of the sequence that created them, which is the whole premise of a saga.
+  </Accordion>
+
+  <Accordion title="Each journal must describe the step it actually undoes" icon="file-lines">
+    The ledger is not only an arithmetic device. It is the **record of what happened**, and its value in an incident, an audit, or a dispute comes entirely from that record being true.
+
+    A balanced ledger with mislabelled journals satisfies the accountant and fails the auditor.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## The fix
+
+Two tests, targeting the two things balance cannot see:
+
+<Steps>
+  <Step title="Assert reversal order">
+    Fetch the compensating journals for a failed transfer and assert their sequence is exactly the reverse of the completed steps: by journal kind and description, not just by count.
+  </Step>
+  <Step title="Assert account pairing">
+    Assert that each compensating journal touches **the same accounts** as the step it claims to reverse. A journal named "reverse reserve" that does not touch the sender's account is a failure regardless of whether the books balance.
+  </Step>
+</Steps>
+
+The mutant now fails 2 tests. The suite went from sixteen assertions that could not see this class of defect to eighteen that can.
+
+---
+
+## The lesson
+
+<div className="arc-claim">
+**Balance is necessary but not sufficient.** An audit trail can be false while the arithmetic is true, and the arithmetic check will never tell you.
+</div>
+
+Three things generalise well beyond ledgers:
+
+<Steps>
+  <Step title="A test suite is untested code until you break the system on purpose">
+    Sixteen passing tests felt like strong coverage. They were strong coverage of *one property*. Nothing had ever checked whether they covered a second.
+  </Step>
+  <Step title="Commutative operations hide ordering bugs completely">
+    Any system where the aggregate is order-independent, sums, set membership, idempotent writes, will pass every aggregate assertion while the sequence is wrong. If order matters for a **non-arithmetic** reason, it needs its own assertion.
+  </Step>
+  <Step title="Ask what each assertion cannot see">
+    "The ledger balances" is a powerful check with a precisely definable blind spot. Writing down that blind spot is what produced the two new tests, not more coverage of the same kind, but coverage of a different kind.
+  </Step>
+</Steps>
+
+<Note>
+**Why this is the story worth retelling.** In an interview, "we use mutation testing" is a claim. "We introduced a defect that passed all sixteen tests because reversals commute, and here is the specific blind spot it exposed" is an argument, and it demonstrates the thing the claim only asserts.
+</Note>
+
+<CardGroup cols={2}>
+  <Card title="The settlement saga" icon="rotate-left" href="/architecture/settlement-saga">
+    The compensation mechanism, specified.
+  </Card>
+  <Card title="What the tests prove" icon="flask" href="/architecture/testing">
+    The full mutation results for the ledger and the saga.
+  </Card>
+</CardGroup>

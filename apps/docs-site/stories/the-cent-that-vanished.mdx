@@ -1,0 +1,146 @@
+---
+title: "The cent that vanished"
+description: "The trial balance is off by €0.03. Nobody can find it, because it was never in one place."
+icon: "coins"
+---
+
+<span className="arc-eyebrow arc-eyebrow--amber">Story · exactness · 5 min</span>
+
+<div className="arc-symptom">
+Month-end. The trial balance is off by **€0.03**. Not €30,000: three cents. Every individual transfer reconciles against the bank statement. Every journal, checked by hand, balances. The finance lead wants to know where three cents went, and the honest answer is that nobody has any idea.
+</div>
+
+---
+
+## Why three cents is worse than thirty thousand
+
+A €30,000 break has a shape. It is one transfer, or one duplicated batch, and you find it by sorting on amount.
+
+Three cents has no shape. It could be one error of three cents, three errors of one cent, or three hundred errors of one hundredth of a cent that happened to accumulate. There is nothing to sort on, nothing to filter by, and no transaction that looks wrong.
+
+<div className="arc-claim">
+The dangerous property of a small break is not its size. It is that **it grows with volume**: and that it is indistinguishable, on any given day, from a system that is working.
+</div>
+
+Someone will eventually suggest a tolerance. That suggestion is the real failure, and it arrives about a week in.
+
+---
+
+## The diagnosis
+
+The fee schedule is 1.5% on transfers below €50. Someone sends €33.33.
+
+```text
+33.33 × 0.015 = 0.49995
+```
+
+Not representable in cents. Something has to happen.
+
+The code does the natural thing:
+
+```ts
+const fee = Math.round(amount * 0.015 * 100) / 100;  // 0.49
+```
+
+€0.49 is booked as revenue, the customer is debited €33.33, and €32.84 moves into in-transit. The journal is written and the ledger accepts it, because €33.33 = €0.49 + €32.84 exactly.
+
+And **€0.00995 has quietly ceased to exist.**
+
+Not moved. Not lost to a rounding account. It was in the multiplication result and it is not in the journal, and no line in the system records the discrepancy, because from the journal's point of view there is no discrepancy. The arithmetic closes. It just closes around a different amount than the fee schedule specifies.
+
+Three hundred transfers of that shape in a month is €2.98. Round it the other way on some and the residuals partly cancel, which is worse: the break becomes small, erratic, and impossible to characterise.
+
+### Where it actually goes
+
+The residual does not disappear into the void; it silently changes who owns it. Round the fee **down** and the customer keeps a fraction they were not entitled to. Round it **up** and Arc takes a fraction it did not charge for. Over a month, across a mixed book, the direction depends on the distribution of transfer amounts.
+
+Nobody decided this. It is a policy the system is executing, that nobody wrote, and that changes with traffic.
+
+---
+
+## The fix, and why it is not "round better"
+
+There is no rounding mode that makes `0.49995` fit in cents. The residual is real. The only question is **where it is recorded**.
+
+Arc records it:
+
+```ts
+const { value: fee, residual } = divResidual(amount.multiply(FEE_BPS), 10_000n);
+```
+
+`divRound` returns the rounded value under an explicitly chosen mode. `divResidual` returns the **exact leftover**, as a `bigint`. It exists for precisely one purpose: so the leftover can be given somewhere to go.
+
+| Account | Dr | Cr |
+| --- | --- | --- |
+| `liability.customer.va_1.EUR` | 33.33 | |
+| `liability.in_transit.EUR` | | 32.83 |
+| `revenue.fee.corridor.EUR` | | 0.49 |
+| `revenue.rounding.EUR` | | 0.01 |
+
+<div className="arc-claim">
+The journal still balances. The fee is still €0.49. But the residual is now **a number someone can look at**: a balance on `revenue.rounding.EUR` that can be queried, reported, and explained.
+
+Three cents at month-end stops being a mystery and becomes a line item.
+</div>
+
+---
+
+## What made it possible
+
+The residual mechanism only works because of a decision made much earlier: [money is a `bigint` count of minor units](/architecture/money), never a float.
+
+<Columns cols={2}>
+  <div>
+    **With floats**
+
+    `amount * 0.015` produces a value that is *already* slightly wrong before any rounding happens. There is no exact residual to extract, because there was no exact result.
+
+    The best you can do is measure the discrepancy against another approximation.
+  </div>
+  <div>
+    **With integers**
+
+    `3333n × 150n / 10000n` has an exact quotient and an exact remainder. `divResidual` returns the remainder because the remainder genuinely exists.
+
+    Exactness is what makes the residual *nameable*.
+  </div>
+</Columns>
+
+This is why the lint rules are aggressive. `Math.round`, `parseFloat`, `toFixed` and fractional literals are all build errors in source, not because any single use is catastrophic, but because each one silently removes the ability to account for what it discarded.
+
+---
+
+## The property that pins it
+
+One example does not prove an allocator is safe. So the guarantee is stated as a property and tested against generated inputs:
+
+<div className="arc-claim">
+**Splitting any amount across any weights always sums back to exactly the original.**
+</div>
+
+The naive implementation fails this immediately. Splitting €10.00 three ways gives €3.33 each, totalling €9.99: a cent evaporates. Arc's allocator distributes remainders deterministically so the total is preserved, and the property test asserts it across randomly generated amounts and weight vectors rather than the handful of cases someone thought to write down.
+
+---
+
+## The lesson
+
+<Steps>
+  <Step title="Rounding is a policy decision, not an implementation detail">
+    Every rounding operation decides who keeps the fraction. Making the mode explicit forces someone to choose deliberately rather than inherit whatever the language does.
+  </Step>
+  <Step title="A residual must have somewhere to go">
+    "Round and move on" is not an algorithm: it is an unrecorded transfer of value. Give the remainder an account and it becomes auditable.
+  </Step>
+  <Step title="Never accept a tolerance on the balance check">
+    The moment `Math.abs(debits - credits) < 0.01` appears, the ledger stops being a ledger. There is no defensible answer to "how far off is acceptable?", and the threshold only ever moves in one direction.
+  </Step>
+</Steps>
+
+<CardGroup cols={2}>
+  <Card title="Why money is never a float" icon="calculator" href="/architecture/money">
+    The mechanism, specified rather than narrated.
+  </Card>
+  <Card title="The journal that balanced and lied" icon="triangle-exclamation" href="/stories/the-journal-that-balanced-and-lied">
+    Next: a ledger where the arithmetic was perfect and the record was false.
+  </Card>
+</CardGroup>

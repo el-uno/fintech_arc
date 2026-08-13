@@ -1,0 +1,175 @@
+---
+title: "The fastest chain that settled last"
+description: "Routing to the chain with the shortest block time made settlement twelve times slower."
+icon: "gauge-high"
+---
+
+<span className="arc-eyebrow arc-eyebrow--amber">Story · time and money · 5 min</span>
+
+<div className="arc-symptom">
+A routing change ships: pick the chain with the lowest block time, because faster blocks mean faster settlement. Polygon produces a block every 2 seconds against Ethereum's 12. Transfers start routing to Polygon.
+
+Median settlement time goes from 20 seconds to **256 seconds**. The metric that was supposed to improve got twelve times worse, and the code does exactly what it was designed to do.
+</div>
+
+---
+
+## The model that was wrong
+
+The reasoning is intuitive and completely wrong:
+
+> A transaction settles when it is in a block. Blocks arrive every *n* seconds. Therefore lower *n* means faster settlement.
+
+The first sentence is the error. **A transaction is not settled when it is in a block.** It is settled when the probability of that block being reorganised out of the chain has fallen far enough that you are willing to pay someone real money against it.
+
+<div className="arc-claim">
+Settlement time is `block_time × confirmations_required`, and those two numbers are **inversely related by design**. Chains with fast, cheap blocks make each individual block less expensive to orphan, so they require more of them to reach equivalent confidence.
+</div>
+
+---
+
+## The table that settles it
+
+| Chain | Block time | Confirmations | Settlement window | Ratio to Ethereum |
+| --- | --- | --- | --- | --- |
+| Solana | 400 ms | 32 | ~13 s | 0.09× |
+| Base | 2 s | 10 | 20 s | 0.14× |
+| Tron | 3 s | 19 | 57 s | 0.40× |
+| Ethereum | 12 s | 12 | 144 s | 1.00× |
+| **Polygon** | **2 s** | **128** | **256 s** | **1.78×** |
+
+Polygon and Base have **identical block times**. Base settles in 20 seconds; Polygon takes 256. The difference is entirely in the finality depth, and a router that only reads block time cannot see it.
+
+Sort that table by block time and you get Solana, Base, Polygon, Tron, Ethereum. Sort it by what actually matters and you get Solana, Base, Tron, Ethereum, Polygon. **Polygon moves from third-fastest to last.**
+
+---
+
+## Why the naive model is so appealing
+
+Because block time is the number everyone publishes. It is on the landing page, it is in the comparison tables, and it is a single scalar that appears to mean "speed".
+
+Finality depth is a security parameter that lives in operational documentation and varies by who you ask. There is no consensus authority publishing "confirmations required": exchanges set their own, and they set them by value at risk.
+
+<div className="arc-gap">
+Which surfaces the honest complication: **finality depth is a policy choice, not a physical constant.** The numbers above are the values Arc simulates, chosen to reflect published guidance. A business with lower risk appetite would use higher numbers and see different settlement times.
+
+That is exactly why it belongs in configuration next to block time rather than in an engineer's head.
+</div>
+
+---
+
+## What the router actually needs
+
+Arc models each chain with its characteristics together, so the settlement window is derived rather than assumed:
+
+```ts
+CHAINS = {
+  polygon: { blockTimeMs: 2_000, finalityDepth: 128, ... },
+  base:    { blockTimeMs: 2_000, finalityDepth: 10,  ... },
+  ...
+}
+```
+
+`selectChain` then scores on the derived value, alongside fee, weighted by a speed preference:
+
+```text
+score = normalise(settlementTime) × speedWeight
+      + normalise(fee)            × (100 − speedWeight)
+```
+
+<div className="arc-claim">
+High speed preference picks **Base**. Low speed preference picks **Tron**: cheaper, and 57 seconds is fine for a transfer that is not time-critical. Neither ever picks Polygon on speed, because the model can see what block time alone hides.
+</div>
+
+Both terms are normalised into comparable ranges before weighting, because adding seconds to gas units is meaningless.
+
+---
+
+## The second-order lesson: chains differ in more than speed
+
+Once you model finality properly, the other per-chain differences become visible and they are not uniform noise:
+
+| Chain | Distinguishing characteristic | What it costs the saga |
+| --- | --- | --- |
+| Solana | Highest **drop** rate, by transaction expiry rather than eviction | Frequent failures, but unambiguous ones |
+| Polygon | **Deepest reorgs** | A transaction counted as included can return to `pending` |
+| Ethereum | Highest **fee volatility** | Network-fee estimates age fastest, so quotes go stale |
+| Base | Shallow finality on a fast chain | The cheapest speed available, and the usual answer |
+| Tron | Lowest fee, middling speed | The usual answer when the transfer is not time-critical |
+
+<div className="arc-claim">
+This is what "chain-agnostic" has to mean to be worth anything: not that the chains are interchangeable, but that **their differences are modelled and the choice is made per transfer** behind one interface.
+
+If all chains behaved identically, the abstraction would be decoration.
+</div>
+
+### The Solana row is the one worth arguing about
+
+At first glance "highest drop rate" reads as the worst entry in that table. It is not, and getting this right changed how the saga treats the chain.
+
+Solana has no global mempool. Transactions are forwarded to upcoming slot leaders, and each one carries a blockhash that expires after roughly a minute. Miss that window and the transaction is **permanently invalid**.
+
+Compare an EVM chain, where a transaction that has not landed is still sitting in mempools somewhere and might confirm later:
+
+<Columns cols={2}>
+  <div>
+    **EVM: a timeout is ambiguous**
+
+    Did it land? Unknown. It might land ten minutes from now, after you have already compensated and refunded the sender. That ambiguity is why idempotency keys are mandatory and why compensation itself has to tolerate a late arrival.
+  </div>
+  <div>
+    **Solana: a timeout resolves**
+
+    Once expired, the transaction cannot land. Ever. The saga gets a definite answer and can compensate without hedging against a straggler.
+  </div>
+</Columns>
+
+<div className="arc-claim">
+**A higher failure rate with unambiguous failures can be easier to build on than a lower failure rate with ambiguous ones.** Frequency and ambiguity are different properties, and a routing model that collapses both into "reliability" cannot express the difference.
+</div>
+
+That distinction only became visible after the finality modelling was fixed. Before it, Solana was just "the one with 400ms blocks".
+
+---
+
+## The bit that is easy to get wrong in code
+
+Even with the right routing, the `settle` step can still lie. The naive implementation:
+
+```ts
+await chain.broadcast(tx);
+// no error thrown — settled!
+```
+
+Broadcasting without error means the transaction reached the mempool. It says nothing about inclusion, nothing about finality, and nothing about whether it reverted.
+
+Arc's `settle` step re-reads the transaction and **requires `final`**:
+
+<div className="arc-claim">
+Checking `final` rather than "no error was thrown" is the difference between confirming settlement and merely confirming submission, and the wrong version looks completely correct until the day a transaction is dropped.
+</div>
+
+---
+
+## The lesson
+
+<Steps>
+  <Step title="The published metric is rarely the operative one">
+    Block time is measurable, publishable, and marketable. Settlement time is what the customer experiences. When those diverge, optimising the visible one moves the invisible one in the wrong direction.
+  </Step>
+  <Step title="Derive composite metrics; never store them">
+    `settlementWindow` is computed from block time and finality depth, so it cannot drift out of sync with either. Storing it as a third field would guarantee that it eventually disagrees.
+  </Step>
+  <Step title="Model the differences that matter, not the ones that are easy">
+    An abstraction over five identical things is decoration. An abstraction over five genuinely different things, whose differences are visible to the router, is doing work.
+  </Step>
+</Steps>
+
+<CardGroup cols={2}>
+  <Card title="The chain layer" icon="link" href="/architecture/chain-layer">
+    The driver interface, the simulator, and chain selection.
+  </Card>
+  <Card title="Settlement and finality" icon="clock" href="/primer/settlement-and-finality">
+    The domain background: probabilistic versus deterministic finality.
+  </Card>
+</CardGroup>

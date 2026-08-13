@@ -1,0 +1,113 @@
+---
+title: "Quiz: settlement"
+sidebarTitle: "Quiz · settlement"
+description: "Twelve questions on the saga, rails, chains and compensation. Commit to an answer before opening each one."
+icon: "circle-question"
+---
+
+<span className="arc-eyebrow">Quiz · 12 questions · ~15 minutes</span>
+
+<Note>
+Scoring: **10–12** you can defend the saga design. **7–9** solid, revisit the misses. **Below 7** re-read [the settlement saga](/architecture/settlement-saga) and [the chain layer](/architecture/chain-layer).
+</Note>
+
+---
+
+<AccordionGroup>
+  <Accordion title="1 · Which settles faster, Polygon or Ethereum?" icon="circle-question">
+    **Ethereum.** 12s × 12 confirmations = 144s. Polygon: 2s × 128 = **256s**.
+
+    Polygon has blocks six times faster and settles nearly twice as slowly. Block time and finality depth are inversely related by design: fast, cheap blocks are individually less expensive to orphan, so more are needed for equivalent confidence.
+
+    The cleanest version of the point: Base and Polygon have **identical** 2s block times and a 12× difference in settlement window.
+  </Accordion>
+
+  <Accordion title="2 · The chaos suite fails the swap step. What does the sender's balance end up as?" icon="circle-question">
+    **Exactly what it was before.** Not approximately, and not net of fees.
+
+    The reserve reversal returns the full €1,000.00: corridor fee and FX spread included. Arc absorbs the cost of a failed transfer.
+
+    The suite also asserts the ledger balances in every currency and every intermediate account is back to zero.
+  </Accordion>
+
+  <Accordion title="3 · Compliance rejects a transfer. Which journals are posted?" icon="circle-question">
+    **None.** Compliance is a hard pre-condition, and it runs **before** `reserve`.
+
+    A rejected or flagged transfer never reaches the first step that posts anything, so there is nothing to compensate. `compliance` is the only step whose compensation is genuinely a no-op.
+  </Accordion>
+
+  <Accordion title="4 · The rail returns a timeout. Retry or unwind?" icon="circle-question">
+    **Retry**: `RailError.retryable` is `true` for a timeout.
+
+    A timeout is not a failure; it is the absence of information about whether the payout landed. That ambiguity is the entire reason idempotency keys exist. Resubmitting with the same key returns the original receipt if the rail already acted.
+
+    A **rejection**: `account_closed`, `invalid_beneficiary`: is `retryable: false`. Retrying it just fails again, more slowly.
+  </Accordion>
+
+  <Accordion title="5 · The settle step compensates. Is the on-chain transaction reversed?" icon="circle-question">
+    **No.** Nothing un-sends a confirmed on-chain transaction.
+
+    The compensation is a **ledger-level** unwind representing funds recovered from the settlement partner. That limitation is real and stated rather than papered over: the ledger records a claim against the partner; the chain records the transfer. Different facts.
+  </Accordion>
+
+  <Accordion title="6 · Is the network-fee journal reversed during compensation?" icon="circle-question">
+    **No, deliberately.** Gas was really spent.
+
+    Reversing it would misstate the expense and produce a balanced ledger that lies about reality. The journal is not tracked for compensation, and it balances on its own, Dr `expense.network_fee.ETH`, Cr `asset.float.chain.ETH`: so the trial balance stays zero either way.
+  </Accordion>
+
+  <Accordion title="7 · Compensation walks steps backwards. Would forwards change the final balances?" icon="circle-question">
+    **No, and that is the trap.** Reversals commute, so the balances are identical.
+
+    Order matters for two non-arithmetic reasons: the rail recall must precede the settlement unwind, and each reversal journal must **describe the step it actually undoes**. Forward order produces a balanced ledger with a false audit trail.
+
+    Forward order passed all sixteen tests until two ordering assertions were added.
+  </Accordion>
+
+  <Accordion title="8 · A payment is submitted at 16:00 to a rail with a 15:00 cut-off and next-business-day latency. When does it arrive?" icon="circle-question">
+    **Not tomorrow: the day after, or later across a weekend.**
+
+    The delays **compound**: it queues to the next opening, *and then* takes the rail's normal latency. Missing by an hour costs a day. Thursday 16:00 → Friday's batch → T+2 across a weekend → **Tuesday**.
+
+    Arc asserts this exact arithmetic. A test checking only "later than submission" would pass an implementation that adds one hour.
+  </Accordion>
+
+  <Accordion title="9 · The settle step broadcasts and no error is thrown. Is it settled?" icon="circle-question">
+    **No.** Broadcasting without error means the transaction reached the mempool: nothing about inclusion, finality, or whether it reverted.
+
+    Arc re-reads the transaction and **requires `final`**. Checking `final` rather than "no error was thrown" is the difference between confirming settlement and confirming submission, and the wrong version looks correct until the day something is dropped.
+  </Accordion>
+
+  <Accordion title="10 · A transaction failed. Another was dropped. Which cost gas?" icon="circle-question">
+    **Failed.** It was mined, executed, and reverted: consuming gas. Dropped never made it into a block and cost nothing.
+
+    They need different compensation, which is why the simulator models them as distinct terminal states rather than collapsing both into "error".
+  </Accordion>
+
+  <Accordion title="11 · A quote was issued four minutes ago. Can it be executed?" icon="circle-question">
+    **No.** The TTL is **30 seconds** and `assertUsable` throws.
+
+    A quote is a short-dated option you have written and given away for free. The customer exercises it if the rate moved in their favour and abandons it otherwise, so honouring a stale quote is a systematic unhedged loss, not a random one.
+
+    The check happens at **execution**, not at display. Validating when the screen rendered tells you nothing about the state when the button was pressed.
+  </Accordion>
+
+  <Accordion title="12 · A reversal itself throws during compensation. What is the saga's status?" icon="circle-question">
+    **`compensation_failed`**: a distinct terminal state from `compensated`, precisely so it can be alerted on.
+
+    The saga stops rather than retrying blindly into a partially-unwound state. This is the one outcome that needs a human, and a real system escalates it to an operational case with the completed and failed steps attached.
+
+    In Arc that case management is Phase 8 and does not exist yet, which is a stated gap rather than a solved problem.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+<CardGroup cols={2}>
+  <Card title="Ledger quiz" icon="circle-question" href="/practice/quiz-ledger">
+    The other twelve, on double-entry and exactness.
+  </Card>
+  <Card title="IRL Scenarios" icon="book" href="/stories">
+    Seven of these answers are stories. Those are the ones worth retelling.
+  </Card>
+</CardGroup>

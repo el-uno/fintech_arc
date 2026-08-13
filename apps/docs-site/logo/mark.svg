@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="Arc">
+  <rect width="32" height="32" rx="7" fill="#0D1117"/>
+  <!-- the corridor: two endpoints, one arc between them -->
+  <path d="M7 22.5 C 7 11.5, 25 11.5, 25 22.5" fill="none" stroke="#2DD4BF" stroke-width="2.1" stroke-linecap="round"/>
+  <circle cx="7" cy="22.5" r="2.6" fill="#2DD4BF"/>
+  <circle cx="25" cy="22.5" r="2.6" fill="#F59E0B"/>
+</svg>

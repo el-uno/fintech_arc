@@ -1,0 +1,125 @@
+---
+title: "ADR 0002: Modular monolith over microservices"
+sidebarTitle: "0002 · Modular monolith"
+description: "One deployable, six bounded contexts, boundaries enforced by CI. Reads as microservices in the diagrams; runs with one command."
+icon: "cubes"
+---
+
+<span className="arc-eyebrow">ADR 0002 · Accepted · Phase 0</span>
+
+<Info>
+**Status:** Accepted · **Phase:** 0 · **Supersedes:** none · **Superseded by:** none
+</Info>
+
+---
+
+## Context
+
+Arc models roughly thirty services across six domains. It is a **public showcase repository**: someone who clones it should reach a working corridor transfer quickly, while the architecture should still demonstrate real distributed-system concerns: sagas, compensating actions, at-least-once delivery, idempotency.
+
+Those two goals pull in opposite directions.
+
+<Columns cols={2}>
+  <div>
+    **Toward microservices**
+
+    The distributed-systems problems are the interesting part. A saga is only genuinely a saga when there is no shared transaction to fall back on.
+  </div>
+  <div>
+    **Toward a monolith**
+
+    A repository whose main job is to be *read and run by strangers* cannot open with thirty minutes of container orchestration. Setup friction is the difference between being read and being starred.
+  </div>
+</Columns>
+
+The question was whether the interesting properties could be kept without the operational cost, and specifically, whether "modular" could be made a checked claim rather than a label that erodes on contact with a deadline.
+
+---
+
+## Decision
+
+**One deployable. Six bounded contexts under `services/`, communicating only through the event catalogue in `@arc/contracts` or by publishing on the in-process bus. No context imports another's code.**
+
+`dependency-cruiser` enforces this in CI. A cross-context import fails the build.
+
+<div className="arc-claim">
+The enforcement is the decision. A modular monolith whose boundaries are documented rather than checked is a monolith with aspirations, and it becomes an actual monolith the first time someone is in a hurry.
+</div>
+
+Synchronous cross-context calls, where they are genuinely required, use **dependency inversion**: the calling context defines a port interface it owns, the other context implements it, and the adapter lives at the composition root outside every context's `src`. Movement's `LedgerPort` is the worked example.
+
+---
+
+## Consequences
+
+### Good
+
+- **`pnpm install && pnpm dev` is the whole setup.** No orchestration, no service discovery, no per-service configuration.
+- **Contexts stay independently extractable**, because the boundary is mechanically checked rather than merely intended. Pulling `movement` into its own deployable becomes a wiring change rather than an archaeology project.
+- **The transactional outbox gives real at-least-once semantics**, so the saga and idempotency work is **genuine rather than simulated away**. This is the crux: the interesting problems survive the topology choice.
+- **One test process** can run a full corridor transfer against the real ledger, the real chain simulator and a real rail, in milliseconds.
+
+### Costs
+
+<div className="arc-gap">
+- **No true network partition between contexts.** Failure modes involving partial network availability are *modelled* rather than *experienced*. Split-brain, slow-but-not-dead dependencies, and asymmetric partitions are reasoned about, not reproduced. This is the largest and most honest cost of the decision.
+- **Everything scales together.** There is no independent scaling of the settlement workers versus the compliance screener.
+- **The event bus is in-process.** Durable, via the outbox table, but not a broker, so backpressure, consumer groups, and partition rebalancing are absent.
+- **A shared process means a shared blast radius.** An unhandled failure in one context can take the deployable down with it, which distributed deployment would contain.
+</div>
+
+---
+
+## Alternatives
+
+<AccordionGroup>
+  <Accordion title="True microservices with Docker Compose: rejected" icon="network-wired">
+    The most realistic option, and the most impressive in diagrams. Real network calls, real partial failures, real independent deployment.
+
+    **Rejected because heavy local setup works against a repository whose main job is to be read and run by strangers.** A reader who has to debug a container network before seeing a ledger entry mostly does not see the ledger entry.
+
+    The fair counterpoint: this decision does trade away the most realistic failure modes, and the cost section above says so rather than pretending the outbox closes the gap entirely.
+  </Accordion>
+
+  <Accordion title="Plain monolith with a documented extraction path: rejected" icon="box">
+    The fastest to build, and the honest default for a system this size.
+
+    **Rejected because it demonstrates the least.** The boundary enforcement is the interesting part of this architecture; removing it removes the point. A documented extraction path with nothing checking it is a promise, and promises about module boundaries have a poor record.
+  </Accordion>
+
+  <Accordion title="Serverless functions per context, not seriously considered" icon="cloud">
+    Would have made local execution worse rather than better, added a cloud dependency to a repository intended to run offline, and made the ledger's transactional requirements substantially harder to satisfy.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Notes on enforcement
+
+The rule needed **two** mechanisms, and discovering why was its own small investigation.
+
+| Mechanism | Catches | Misses |
+| --- | --- | --- |
+| `dependency-cruiser` | Relative imports, `../../ledger/src/posting` | **Package-name imports**: `@arc/ledger` |
+| ESLint `no-restricted-imports` | Package-name imports | n/a |
+
+`@arc/ledger` resolves through `node_modules` to a `dist` path that does not exist until after a build, so dependency-cruiser cannot resolve the edge and skips it **silently**: no error, no warning, just a rule that quietly does not apply.
+
+<div className="arc-claim">
+Both probes were verified to fire by writing a deliberate violation of each kind. An architecture rule you have not tried to break is a rule you do not know you have.
+</div>
+
+[The boundary that wasn't →](/stories/the-boundary-that-wasnt)
+
+---
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Contexts and events" icon="inbox" href="/architecture/contexts-and-events">
+    The outbox, ports, and how the boundary holds in practice.
+  </Card>
+  <Card title="Architecture overview" icon="layer-group" href="/architecture/overview">
+    The six contexts and what each owns.
+  </Card>
+</CardGroup>

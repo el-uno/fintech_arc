@@ -1,0 +1,171 @@
+---
+title: "What the tests prove"
+description: "Property-based invariants, chaos injection at every saga step, and mutation testing, because a suite that passes on broken code proves nothing."
+icon: "flask"
+---
+
+<span className="arc-eyebrow">Architecture · proof</span>
+
+Every claim on this site is supposed to have something behind it. This page is what is behind them.
+
+The organising idea: **example tests only cover the cases someone thought of.** In a domain where the failure mode is "a cent went missing under a combination nobody anticipated", that is not enough, so the suite is property-based where it matters, and the properties themselves were checked by deliberately breaking the code.
+
+---
+
+## Six layers
+
+| Layer | Covers |
+| --- | --- |
+| Unit | Money arithmetic, fee calculation, rule evaluation, identifier check digits |
+| Property-based | Ledger invariants under randomised transaction sequences |
+| Integration | Each context against a real Postgres, including the constraint triggers |
+| Contract | Every event and API schema, versioned |
+| Scenario (E2E) | The named corridor flows, run in CI |
+| **Chaos** | Injected failure at every saga step, asserting the ledger ends balanced |
+
+The last one is the one that matters most.
+
+<div className="arc-claim">
+**For every failure point in the settlement saga, the ledger must end balanced.** That single assertion is the strongest correctness claim this project can make, and it is checked at every one of the five steps rather than argued for in prose.
+</div>
+
+---
+
+## The properties
+
+Property-based tests generate inputs rather than enumerating them. Each of these runs across randomly generated journals, amounts, weights and sequences.
+
+| Property | Assertion |
+| --- | --- |
+| Balance is unforgiving | Any balanced journal perturbed by **one minor unit** anywhere is rejected |
+| Completeness | Any journal missing any entry is rejected |
+| Solvency under load | After any random sequence of journals, the trial balance is zero in every currency |
+| Rejection is total | A rejected journal changes nothing: entry count identical before and after |
+| Reversal is exact | A journal and its reversal return every touched balance to precisely where it was |
+| Reversal is an involution | Reversing twice returns the original |
+| Balances are a pure fold | Recomputing from the log, in **any order**, gives the same answer |
+| Value is conserved | Splitting any amount across any weights sums back to exactly the original |
+| Quotes never favour the customer | Across the full amount range, the customer is never given more than mid-market |
+
+Two of these deserve a note.
+
+**"Rejection is total"** is the property that makes balance-or-reject meaningful. It is not enough that an invalid journal throws: it must leave no trace, because a partial write is precisely the unbalanced state the whole system is built to prevent.
+
+**"Balances are a pure fold, in any order"** is what makes the derived-balance claim real. If order mattered, a replay would depend on how entries happened to be sorted, and "replay the log to verify" would be a ritual rather than a check.
+
+---
+
+## Mutation testing
+
+A test suite that passes when the code is broken proves nothing. So the code was broken, deliberately, and the suite was watched.
+
+### The ledger
+
+| Mutation | Result |
+| --- | --- |
+| Balance validation removed from `post()` | 3 tests failed |
+| Overdraft floor off by one minor unit | 1 test failed |
+| `entrySign()` ignores account type | 9 tests failed |
+
+### The saga
+
+| Mutation | Result |
+| --- | --- |
+| Compensation does nothing | 6 tests failed |
+| Reversal doesn't flip direction | 6 tests failed |
+| **Compensate in forward order** | **0 tests failed** → tests added → 2 tests failed |
+
+<div className="arc-claim">
+That third row is the most valuable line in this document. Compensating in the *wrong order* produced a perfectly balanced ledger with a false audit trail, and sixteen passing tests did not notice, because balance cannot detect it.
+
+**Balance is necessary but not sufficient.** Two tests asserting reversal order and account pairing were added; the mutant now fails.
+</div>
+
+The full narrative is [The journal that balanced and lied](/stories/the-journal-that-balanced-and-lied), and it is the story most worth stealing for an interview.
+
+---
+
+## The chaos suite
+
+The saga's `hooks.beforeStep` exists **solely** so the chaos suite can inject a failure at an exact step.
+
+That hook lives in the production type rather than in a test subclass, which is deliberate: a test double of the thing under test exercises the double, not the code. Keeping injection in the real type means the chaos suite runs the *real* code path.
+
+For each of the five steps, the suite fails that step and asserts four things:
+
+<Steps>
+  <Step title="Status is compensated">
+    Not `completed`, not `compensation_failed`. The saga recognised the failure and unwound cleanly.
+  </Step>
+  <Step title="The ledger is balanced in every currency">
+    Trial balance zero, per currency, independently.
+  </Step>
+  <Step title="The sender's balance is exactly what it was">
+    Not approximately. Exactly, to the minor unit.
+  </Step>
+  <Step title="Every intermediate account is back to zero">
+    In-transit, corridor fee, FX spread. A transfer that unwound must leave no residue anywhere: a balanced ledger with a stranded €4.85 in a fee account is still wrong.
+  </Step>
+</Steps>
+
+That fourth assertion is the one that catches partial compensation. Balance alone would pass if a fee was reversed into the wrong account.
+
+---
+
+## Testing against real dependencies, not mocks
+
+The Phase 4 harness wires the **real** ledger, the **real** chain simulator, and a **real** rail. The saga is never tested against mocks of its own dependencies.
+
+<Columns cols={2}>
+  <div>
+    **Why this is affordable here**
+
+    Every external is already a deterministic simulator. There is no network call to stub, no clock to freeze, no flaky testnet. The chain simulator has no wall clock, time is a function the caller injects, so a full settlement runs in milliseconds.
+  </div>
+  <div>
+    **Why it matters**
+
+    Mocking the ledger in a saga test means asserting the saga called a function. Using the real ledger means asserting **the money is right**, which is the only assertion anyone actually cares about.
+  </div>
+</Columns>
+
+`assertBalancedLedger` is the shared assertion, used by every scenario and chaos test.
+
+---
+
+## Determinism as a testing strategy
+
+The chain simulator's determinism is not a nicety: it is what makes several of these tests possible at all.
+
+- A seeded run reproduces the same blocks, reorgs, and transaction outcomes every time, so a failure is reproducible from a seed rather than from a screenshot.
+- `forceReorg(depth)` triggers a reorg at a **precise** moment. Tuning a probability until a test happens to reorg is flaky and proves nothing about the code path you meant to exercise.
+- Identifier generation is deterministic from a seed, so the same virtual account always yields the same IBAN and a replayed scenario is byte-identical.
+
+<div className="arc-gap">
+**Known gaps, stated rather than hidden.**
+
+- The property suite runs against the in-memory store for speed. `PrismaLedgerStore` exists and the database constraints are verified by raw SQL against a live database, but the property suite and the real constraints are not yet exercised together in a single run.
+- There is a **race** between the overdraft balance read and the append. Single-threaded and in-memory it cannot occur; `PrismaLedgerStore` must close it with `SELECT … FOR UPDATE` or a serializable transaction. The database's balance trigger catches unbalanced journals but **not** a race that overdraws an account.
+- Compliance-blocked paths are not yet in the chaos suite, because the real `CompliancePort` implementation is not wired.
+</div>
+
+---
+
+## What this posture costs
+
+Honesty about the trade, since this page is about evidence:
+
+- **Property tests are slower to write** than examples, and a failure gives you a generated counterexample rather than a sentence. Shrinking helps; it does not make it free.
+- **Mutation testing is manual here.** Defects were introduced by hand and reverted, not driven by a mutation framework. That is fine at this size and would not scale: a real mutation runner is the right answer past a certain point.
+- **Determinism constrains the simulators.** Everything random must flow through the seeded PRNG, which is a discipline every future contributor has to keep.
+
+All three are worth it for one reason: the claims on this site are checkable, and a reader who does not believe one can run `pnpm verify` and find out.
+
+<CardGroup cols={2}>
+  <Card title="The story behind the best mutation" icon="book" href="/stories/the-journal-that-balanced-and-lied">
+    Sixteen green tests, a broken audit trail, and what it took to catch it.
+  </Card>
+  <Card title="Run it yourself" icon="terminal" href="/start/quickstart">
+    `pnpm verify` runs everything described on this page.
+  </Card>
+</CardGroup>

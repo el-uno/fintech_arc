@@ -1,0 +1,139 @@
+---
+title: "Chain and settlement"
+description: "Finality as a probability, block time versus settlement window, reorgs, failed versus dropped, and chain selection."
+icon: "link"
+---
+
+<span className="arc-eyebrow">Practice · question bank · answer out loud first</span>
+
+Ten questions on the middle leg of the corridor. These are the ones most likely to separate a candidate who has read about blockchains from one who has settled money over them.
+
+---
+
+## Finality
+
+<AccordionGroup>
+  <Accordion title="1 · Distinguish settlement from finality." icon="clock">
+    **Answer.** **Settlement** is the discharge of an obligation: I owed you money, now I do not. **Finality** is the point after which that discharge cannot be undone, and it is a legal concept before it is a technical one.
+
+    In an RTGS system like TARGET2 or Fedwire, finality is deterministic and **legally defined**: statute says the payment is irrevocable at a specific instant. On a public blockchain it is **probabilistic**: a transaction can be reorganised out, and the probability decays as blocks accumulate, approaching but never reaching zero.
+
+    **Follow-up: doesn't proof-of-stake fix this?** It improves it. Ethereum's checkpointing gives *economic* finality: reverting requires burning a large fraction of staked ETH. That is a very expensive disincentive, which is a different kind of guarantee than a statute. Being precise about that difference is the point.
+  </Accordion>
+
+  <Accordion title="2 · How many confirmations should you wait for?" icon="layer-group">
+    **Answer.** It is not a technical constant. It is a **business decision**: the confirmation depth at which the residual reorg probability is acceptable relative to the value at risk.
+
+    A €50 transfer and a €500,000 transfer do not warrant the same depth. Exchanges set their own thresholds for exactly this reason, and they set them by value.
+
+    **Follow-up: so what does Arc do?** Models a finality depth per chain as configuration next to block time, so the settlement window is derived rather than assumed. A firm with lower risk appetite changes the numbers and everything downstream recomputes.
+  </Accordion>
+
+  <Accordion title="3 · Which settles faster, Polygon or Ethereum?" icon="gauge-high">
+    **Answer.** **Ethereum**, by a wide margin, and this is the question that catches people.
+
+    Polygon: 2s blocks, 128 confirmations → **256s**. Ethereum: 12s blocks, 12 confirmations → 144s. Polygon has blocks six times faster and settles nearly twice as slowly.
+
+    Settlement time is `block_time × confirmations`, and those two are **inversely related by design**. Chains with fast, cheap blocks make each block less expensive to orphan, so they need more of them for equivalent confidence.
+
+    **Follow-up: what is the fastest in your set?** Solana at ~13s (400ms × 32), then Base at 20s. Base and Polygon have *identical* block times and a 12× difference in settlement window, which is the cleanest demonstration that block time alone tells you nothing. [The scenario](/stories/the-fastest-chain-that-settled-last).
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Failure modes
+
+<AccordionGroup>
+  <Accordion title="4 · A transaction failed. A transaction was dropped. Why does the difference matter?" icon="code-branch">
+    **Answer.** A **failed** transaction was mined, executed, and reverted: it **consumed gas**. A **dropped** transaction never made it into a block and cost nothing.
+
+    They need different compensation. Reversing a failed transaction must **not** reverse the gas expense, because the gas was really spent. Pretending otherwise produces a balanced ledger that misstates reality.
+
+    **Follow-up: how does Arc handle that?** The network-fee journal is deliberately not tracked for compensation and therefore never reversed. It balances on its own, Dr expense, Cr chain float, so the trial balance stays zero either way. Where "balanced" and "true" pull apart, true wins.
+  </Accordion>
+
+  <Accordion title="4b · Solana has the highest drop rate in the set. Is it therefore the least reliable choice?" icon="bolt">
+    **Answer.** No, and this is the question that separates a candidate who has read chain documentation from one who has reasoned about operating on it.
+
+    Solana has no global mempool. Transactions are forwarded to upcoming slot leaders, and each carries a blockhash valid for roughly a minute. Miss that window and the transaction is **permanently invalid** rather than pending somewhere.
+
+    So the failure is more frequent and **far less ambiguous**. On an EVM chain a transaction that has not landed might still land, possibly after you have already compensated and refunded the sender. On Solana, once it has expired, it cannot.
+
+    **Frequency and ambiguity are different properties.** A frequent, definite failure is cheaper to build a saga around than a rare, indefinite one, because the compensation path never has to hedge against a late arrival.
+
+    **Follow-up: what does that change in the code?** The retry is clean. Re-sign with a fresh blockhash rather than carefully reusing a nonce, and there is no window in which the original and the retry can both succeed. It does not remove the need for idempotency keys, since the failure could also be a lost response rather than an expiry, but it narrows what they have to defend against.
+  </Accordion>
+
+  <Accordion title="5 · What is a reorg, and why is it the worst failure mode for a payments business?" icon="rotate">
+    **Answer.** The chain discards blocks it had built on and adopts a competing branch. Transactions in the discarded blocks return to the mempool: they are un-mined, and a transaction you counted as included is suddenly `pending` again.
+
+    It is the worst case because it is the one where **you already told the customer it worked**.
+
+    **Follow-up: how do you test for something probabilistic?** Two ways, and the second matters more. Probabilistically during block production, seeded so a run is reproducible, and **deterministically** via `forceReorg(depth)`, because the chaos suite needs a reorg at a precise moment. Tuning a probability until a test happens to reorg is flaky and proves nothing about the path you meant to exercise.
+  </Accordion>
+
+  <Accordion title="6 · After a reorg, what does the consumer need to know?" icon="list">
+    **Answer.** Exactly which transactions were reverted. Arc's `reorg` event carries `revertedTransactions` so the consumer does not have to diff state itself.
+
+    Rollback clears each affected transaction's block height, resets status to `pending`, and pushes it to the **front** of the mempool so it is re-mined promptly rather than queuing behind everything submitted since.
+
+    **Follow-up: why not let the consumer diff?** Because diffing requires the consumer to have retained the prior state, correctly, and every consumer would implement that separately. Putting it in the event makes it one implementation instead of *n*.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Design
+
+<AccordionGroup>
+  <Accordion title="7 · What does 'chain-agnostic' actually mean?" icon="plug">
+    **Answer.** Not that the chains are interchangeable: that the **differences are modelled and the choice is made per transfer**, behind one interface.
+
+    `ChainDriver` has six methods: `broadcast`, `getTransaction`, `getConfirmations`, `estimateFee`, `head`, `subscribe`. Everything upstream codes against it, so swapping the simulator for a real RPC client is another implementation rather than a change to the saga.
+
+    **Follow-up: how do you know the abstraction is real?** Nothing in the movement context can tell it is talking to a simulator. That is the test: the code above cannot detect what is below.
+  </Accordion>
+
+  <Accordion title="8 · How would you pick a chain per transfer?" icon="route">
+    **Answer.** Score settlement time against fee, weighted by a speed preference, with both terms normalised into comparable ranges first: adding seconds to gas units is meaningless otherwise.
+
+    High speed preference picks Base; low picks Tron. Neither ever picks Polygon on speed.
+
+    **Follow-up: what is missing?** Liquidity depth on the destination pair and current network congestion, both of which move far faster than the static characteristics. Arc's scoring is deliberately simple and says so: the interface has room for both, the implementation does not have them yet.
+  </Accordion>
+
+  <Accordion title="9 · Your settle step broadcasts without error. Is the transfer settled?" icon="triangle-exclamation">
+    **Answer.** No. Broadcasting without error means the transaction reached the mempool. It says nothing about inclusion, nothing about finality, and nothing about whether it reverted.
+
+    Arc's `settle` re-reads the transaction and **requires `final`**. Checking `final` rather than "no error was thrown" is the difference between confirming settlement and merely confirming submission, and the wrong version looks completely correct until the day a transaction is dropped.
+
+    **Follow-up: how do you wait without a wall clock?** The simulator has none; time is a function the caller injects (`advanceChain`). That is also what makes a full settlement testable in milliseconds.
+  </Accordion>
+
+  <Accordion title="10 · Can you reverse an on-chain settlement?" icon="ban">
+    **Answer.** No, and it is important to say so plainly.
+
+    Arc's `settle` compensation is a **ledger-level** unwind representing funds recovered from the settlement partner. Nothing un-sends a confirmed on-chain transaction. That limitation is documented rather than papered over, because an architecture implying otherwise is lying about what a blockchain is.
+
+    **Follow-up: so what actually happens commercially?** You have a relationship with the settlement partner and a claim against them. The ledger records the claim. The chain records the transfer. Those are different facts and the system should not conflate them.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Questions to ask them back
+
+- What confirmation depth do you use, and is it a function of value or a constant?
+- What happens if a chain reorgs after you have credited the beneficiary?
+- Do you credit before finality? If so, is that modelled as a credit exposure anywhere?
+- How do you test reorg handling?
+
+<CardGroup cols={2}>
+  <Card title="Next: risk and compliance" icon="shield" href="/practice/compliance">
+    Tiering, fuzzy matching, AML rules, four-eyes approval.
+  </Card>
+  <Card title="Settlement quiz" icon="circle-question" href="/practice/quiz-settlement">
+    Twelve questions across the saga, rails and chains.
+  </Card>
+</CardGroup>
