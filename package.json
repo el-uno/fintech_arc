@@ -18,7 +18,9 @@
     "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm boundaries && pnpm test",
     "db:up": "docker compose -f ops/docker-compose.yml up -d",
     "db:down": "docker compose -f ops/docker-compose.yml down",
-    "db:migrate": "prisma migrate dev --schema prisma/schema.prisma"
+    "db:migrate": "prisma migrate dev --schema prisma/schema.prisma",
+    "dev": "pnpm build && pnpm --filter @arc/scenario start",
+    "db:generate": "prisma generate --schema prisma/schema.prisma"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
@@ -33,5 +35,8 @@
     "vitest": "^2.1.8",
     "zod": "^3.24.1"
   },
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "@prisma/client": "^6.19.3"
+  }
 }

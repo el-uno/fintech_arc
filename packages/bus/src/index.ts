@@ -16,3 +16,5 @@ export {
   type DrainResult,
   type ProcessedLog,
 } from './dispatcher.js';
+
+export { PrismaOutbox, PrismaProcessedLog } from './prisma-outbox.js';

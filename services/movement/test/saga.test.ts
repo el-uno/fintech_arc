@@ -66,17 +66,45 @@ describe('the happy path', () => {
     expect((await harness.senderBalance()).toDecimalString()).toBe('4000.00');
   });
 
-  it('leaves the receive-currency float flat once the payout lands', async () => {
+  it('discharges the receive obligation and keeps only the spread as float', async () => {
     const harness = await createHarness();
     const quote = await quoteFor(harness);
     await sagaFor(harness).execute(transferInput(quote));
 
-    // KES arrived from the partner and left to the beneficiary.
+    const { projectBalance } = await import('@arc/ledger');
     const entries = harness.store.allEntries();
-    const kes = entries.filter((e) => e.amount.currency === 'KES');
-    const debits = kes.filter((e) => e.direction === 'debit').length;
-    const credits = kes.filter((e) => e.direction === 'credit').length;
-    expect(debits).toBe(credits);
+
+    // The obligation to the beneficiary is fully discharged.
+    const inTransit = projectBalance(ACCOUNTS.inTransitReceive, 'liability', 'KES', entries);
+    expect(inTransit.posted.isZero).toBe(true);
+
+    // The partner delivered at mid and the beneficiary was paid at the quoted
+    // rate, so exactly the spread remains as KES float.
+    const float = projectBalance(ACCOUNTS.bankFloatReceive, 'asset', 'KES', entries);
+    expect(float.posted.equals(quote.receiveAtMid.subtract(quote.receiveAmount))).toBe(true);
+
+    harness.assertBalancedLedger();
+  });
+
+  it('recognises the FX spread as revenue, not as a hidden FX position', async () => {
+    const harness = await createHarness();
+    const quote = await quoteFor(harness);
+    await sagaFor(harness).execute(transferInput(quote));
+
+    const { projectBalance } = await import('@arc/ledger');
+    const spread = projectBalance(
+      ACCOUNTS.fxSpreadReceive,
+      'revenue',
+      'KES',
+      harness.store.allEntries(),
+    );
+
+    // The customer receives the quoted rate; the partner settles at mid. The
+    // difference is Arc's margin and must appear as revenue.
+    const expected = quote.receiveAtMid.subtract(quote.receiveAmount);
+    expect(expected.isPositive).toBe(true);
+    expect(spread.posted.equals(expected)).toBe(true);
+
     harness.assertBalancedLedger();
   });
 
@@ -126,6 +154,8 @@ describe('chaos: a failure at every step unwinds to a balanced ledger', () => {
         [ACCOUNTS.inTransitReceive, 'liability', 'KES'],
         [ACCOUNTS.corridorFee, 'revenue', 'EUR'],
         [ACCOUNTS.fxSpread, 'revenue', 'EUR'],
+        [ACCOUNTS.fxSpreadReceive, 'revenue', 'KES'],
+        [ACCOUNTS.bankFloatReceive, 'asset', 'KES'],
       ] as const) {
         const balance = projectBalance(code, type, currency, entries);
         expect(balance.posted.isZero).toBe(true);

@@ -27,6 +27,8 @@ export interface AccountRefs {
   readonly inTransitReceive: string;
   readonly corridorFee: string;
   readonly fxSpread: string;
+  /** FX spread revenue, denominated in the receive currency. */
+  readonly fxSpreadReceive: string;
   readonly fxPositionSend: string;
   readonly fxPositionSettlement: string;
   readonly chainFloat: string;
@@ -198,6 +200,12 @@ export class SettlementSaga {
       },
     ];
 
+    // The settlement partner delivers at mid-market; the customer is paid at the
+    // quoted rate. The difference is Arc's FX spread and must be recognised as
+    // revenue here — it is the only point in the flow where it becomes real.
+    // Left unbooked it would sit invisibly in the FX position accounts.
+    const spreadInReceive = quote.receiveAtMid.subtract(quote.receiveAmount);
+
     const settleEntries: JournalEntryInput[] = [
       {
         account: accounts.fxPositionSettlement,
@@ -205,9 +213,16 @@ export class SettlementSaga {
         amount: quote.settlementAmount,
       },
       { account: accounts.chainFloat, direction: 'credit', amount: quote.settlementAmount },
-      { account: accounts.bankFloatReceive, direction: 'debit', amount: quote.receiveAmount },
+      { account: accounts.bankFloatReceive, direction: 'debit', amount: quote.receiveAtMid },
       { account: accounts.inTransitReceive, direction: 'credit', amount: quote.receiveAmount },
     ];
+    if (spreadInReceive.isPositive) {
+      settleEntries.push({
+        account: accounts.fxSpreadReceive,
+        direction: 'credit',
+        amount: spreadInReceive,
+      });
+    }
 
     const payoutEntries: JournalEntryInput[] = [
       { account: accounts.inTransitReceive, direction: 'debit', amount: quote.receiveAmount },

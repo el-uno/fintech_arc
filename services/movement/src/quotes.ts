@@ -35,6 +35,8 @@ export interface Quote {
   readonly corridor: string;
   readonly sendAmount: Money;
   readonly receiveAmount: Money;
+  /** What the customer would receive at mid-market. The gap is Arc's spread. */
+  readonly receiveAtMid: Money;
   readonly settlementAmount: Money;
   readonly midRate: Rate;
   readonly quotedRate: Rate;
@@ -153,6 +155,7 @@ export class QuoteEngine {
       corridor: request.corridor,
       sendAmount: request.sendAmount,
       receiveAmount,
+      receiveAtMid: atMid,
       settlementAmount,
       midRate,
       quotedRate,

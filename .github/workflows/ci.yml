@@ -12,6 +12,9 @@ concurrency:
 env:
   DATABASE_URL: postgresql://arc:arc@localhost:5432/arc?schema=public
   REDIS_URL: redis://localhost:6379
+  # Makes the database tests fail loudly rather than skip if DATABASE_URL is
+  # ever lost. A silently skipped integration suite is worse than none.
+  ARC_REQUIRE_DB: '1'
 
 jobs:
   verify:
@@ -54,6 +57,9 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
       - name: Format
         run: pnpm format:check
 
@@ -73,3 +79,8 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+      # Proves the whole stack runs against a real database, not just that the
+      # units pass in isolation.
+      - name: End-to-end scenario
+        run: pnpm dev

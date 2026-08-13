@@ -50,3 +50,10 @@ export {
   registerLedgerProvisioning,
   type ProvisionOptions,
 } from './provisioning.js';
+
+export {
+  INT64_MAX,
+  INT64_MIN,
+  PrismaLedgerStore,
+  type PrismaLedgerStoreOptions,
+} from './prisma-store.js';

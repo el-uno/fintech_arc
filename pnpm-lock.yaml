@@ -7,6 +7,10 @@ settings:
 importers:
 
   .:
+    dependencies:
+      '@prisma/client':
+        specifier: ^6.19.3
+        version: 6.19.3(prisma@6.19.3(typescript@5.9.3))(typescript@5.9.3)
     devDependencies:
       '@eslint/js':
         specifier: ^9.17.0
@@ -42,11 +46,32 @@ importers:
         specifier: ^3.24.1
         version: 3.25.76
 
+  apps/scenario:
+    dependencies:
+      '@arc/chain':
+        specifier: workspace:*
+        version: link:../../packages/chain
+      '@arc/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@arc/ledger':
+        specifier: workspace:*
+        version: link:../../services/ledger
+      '@arc/money':
+        specifier: workspace:*
+        version: link:../../packages/money
+      '@arc/movement':
+        specifier: workspace:*
+        version: link:../../services/movement
+
   packages/bus:
     dependencies:
       '@arc/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@arc/db':
+        specifier: workspace:*
+        version: link:../db
 
   packages/chain:
     dependencies:
@@ -60,6 +85,12 @@ importers:
         specifier: ^3.24.1
         version: 3.25.76
 
+  packages/db:
+    dependencies:
+      '@prisma/client':
+        specifier: 6.19.3
+        version: 6.19.3(prisma@6.19.3(typescript@5.9.3))(typescript@5.9.3)
+
   packages/money: {}
 
   services/ledger:
@@ -70,6 +101,9 @@ importers:
       '@arc/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@arc/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@arc/money':
         specifier: workspace:*
         version: link:../../packages/money
@@ -331,6 +365,18 @@ packages:
     engines: {node: ^22.20 || ^24.12 || >=25}
     cpu: [x64]
     os: [linux]
+
+  '@prisma/client@6.19.3':
+    resolution: {integrity: sha512-mKq3jQFhjvko5LTJFHGilsuQs+W+T3Gm451NzuTDGQxwCzwXHYnIu2zGkRoW+Exq3Rob7yp2MfzSrdIiZVhrBg==}
+    engines: {node: '>=18.18'}
+    peerDependencies:
+      prisma: '*'
+      typescript: '>=5.1.0'
+    peerDependenciesMeta:
+      prisma:
+        optional: true
+      typescript:
+        optional: true
 
   '@prisma/config@6.19.3':
     resolution: {integrity: sha512-CBPT44BjlQxEt8kiMEauji2WHTDoVBOKl7UlewXmUgBPnr/oPRZC3psci5chJnYmH0ivEIog2OU9PGWoki3DLQ==}
@@ -1477,6 +1523,11 @@ snapshots:
 
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
     optional: true
+
+  '@prisma/client@6.19.3(prisma@6.19.3(typescript@5.9.3))(typescript@5.9.3)':
+    optionalDependencies:
+      prisma: 6.19.3(typescript@5.9.3)
+      typescript: 5.9.3
 
   '@prisma/config@6.19.3':
     dependencies:

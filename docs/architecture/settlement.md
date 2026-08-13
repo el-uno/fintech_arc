@@ -79,12 +79,17 @@ Two currencies, each balancing independently. The EUR position account now carri
 
 ### 3. `settle` — USDC leaves, KES arrives
 
-| Account                    | Dr         | Cr         |
-| -------------------------- | ---------- | ---------- |
-| `equity.fx_position.USDC`  | 1072.35    |            |
-| `asset.float.chain.USDC`   |            | 1072.35    |
-| `asset.float.bank.KES`     | 138,254.00 |            |
-| `liability.in_transit.KES` |            | 138,254.00 |
+| Account                     | Dr         | Cr         |
+| --------------------------- | ---------- | ---------- |
+| `equity.fx_position.USDC`   | 1072.35    |            |
+| `asset.float.chain.USDC`    |            | 1072.35    |
+| `asset.float.bank.KES`      | 139,121.37 |            |
+| `liability.in_transit.KES`  |            | 138,286.64 |
+| `revenue.fee.fx_spread.KES` |            | 834.73     |
+
+**The partner settles at mid-market; the customer is paid at the quoted rate.** The difference is Arc's FX margin, and this is the only point in the flow where it becomes real, so it is recognised as revenue here.
+
+Leaving it unbooked was a real defect, found by running the scenario against a live database and querying the revenue accounts: `revenue.fee.fx_spread` had **no entries at all**. The quote itemised a spread, the customer paid it, and the margin sat invisibly inside the FX position accounts. The ledger balanced the whole time — balance cannot detect unrecognised revenue.
 
 Plus a separate journal for the gas actually spent:
 
@@ -189,6 +194,7 @@ Quotes carry a TTL (30s default) and `assertUsable` refuses an expired one. A pr
 ## What is not here yet
 
 - **Holds.** The ledger models them (`available = posted − reserved`) but the saga debits directly rather than reserving at quote time. Wiring holds is a small change and belongs with the transfer API.
+- **FX position hedging.** The EUR position account accumulates a standing exposure per transfer. Nothing closes or hedges it; that is a treasury function, not built.
 - **Partial-failure recovery beyond compensation.** If a reversal itself fails, the saga returns `compensation_failed` and stops. A real system escalates that to an operational case — Phase 8.
 - **On-chain irreversibility.** Reversing the `settle` step is a _ledger-level_ compensation representing funds recovered from the settlement partner, not an on-chain reversal. Nothing un-sends a confirmed transaction. The gas fee is deliberately **not** reversed: it was really spent.
 - **Real compliance.** `AlwaysApprove` is the placeholder; Phase 5 replaces it.

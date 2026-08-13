@@ -148,7 +148,12 @@ cp .env.example .env && pnpm prisma migrate deploy --schema prisma/schema.prisma
 pnpm verify
 ```
 
+```bash
+pnpm dev
+```
+
 `pnpm verify` runs the whole gate: format, lint, typecheck, architecture boundaries, and tests.
+`pnpm dev` runs one corridor transfer end to end against Postgres and prints every journal it posts, plus the trial balance.
 
 **Requires** Node 22+, pnpm 9, Docker.
 
@@ -181,10 +186,13 @@ error  toFixed() formats a float. Use Money.toDecimalString()                  n
 packages/
 ├── money/         Money, Rate, exact rounding — 94 tests, property-based
 ├── contracts/     Event catalogue and envelope — the seam between contexts
-├── bus/           Event bus, transactional outbox, dispatcher — 14 tests
-└── chain/         Chain-agnostic driver + deterministic simulator — 23 tests
+├── bus/           Event bus, outbox (in-memory + Postgres) — 14 tests
+├── chain/         Chain-agnostic driver + deterministic simulator — 23 tests
+└── db/            Prisma client and transaction helpers
+apps/
+└── scenario/      `pnpm dev` — a corridor transfer against Postgres
 services/
-├── ledger/        Double-entry posting engine, balances — 37 tests
+├── ledger/        Double-entry engine, Postgres store, locking — 55 tests
 ├── product/       Onboarding, tiers, virtual accounts — 24 tests
 ├── movement/      Rails, quotes, settlement saga — 42 tests
 ├── risk/          KYC/KYB, sanctions, AML rules, review queues — 47 tests
@@ -200,6 +208,8 @@ Two guarantees are already pinned by tests:
 **Value is conserved under allocation.** Splitting any amount across any weights always sums back to exactly the original — the property that stops a cent appearing or vanishing when a transfer is broken into fees.
 
 **Delivery is at-least-once, processing is effectively-once.** The outbox stages events in the same transaction as the state change. Handlers that already succeeded are never re-run on retry, and a poison event is parked for review rather than dropped or left blocking the queue.
+
+**It runs against a real database, and the invariants are tested there.** `pnpm dev` executes a full corridor transfer against Postgres and prints every journal. 18 integration tests exercise the constraint triggers, append-only enforcement, and concurrent posting — including two that prove row locking stops concurrent transfers double-spending the same balance.
 
 **Requests are signed, idempotent and rate-limited.** A token says who you are; an HMAC signature says the body was not altered and is not a replay. Retrying a payout returns the original response — reusing a key with a different body is a conflict, not a cache hit. See [platform and security](docs/architecture/security.md).
 

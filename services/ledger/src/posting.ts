@@ -57,6 +57,22 @@ export interface LedgerStore {
   activeHoldsFor(accountCodes: readonly string[]): Promise<Hold[]>;
   /** Must be atomic: every entry lands or none does. */
   append(journal: PostedJournal): Promise<PostedJournal>;
+  /**
+   * Run `fn` with the named accounts locked against concurrent posting.
+   *
+   * Without this the overdraft check is a read-then-write race: two concurrent
+   * transfers can both read a sufficient balance and both proceed, overdrawing
+   * the account. The database triggers do not catch it — they enforce that a
+   * journal balances, not that an account stayed above its floor.
+   *
+   * A store that cannot lock (single-threaded, in-memory) may pass straight
+   * through; a real store must take row locks and keep the read and the write
+   * inside one transaction.
+   */
+  withAccountLocks<T>(
+    accountCodes: readonly string[],
+    fn: (store: LedgerStore) => Promise<T>,
+  ): Promise<T>;
 }
 
 export class PostingEngine {
@@ -77,18 +93,26 @@ export class PostingEngine {
       };
     });
 
-    await this.assertNoOverdraft(entries, accounts);
+    const touched = [...new Set(entries.map((e) => e.accountCode))].sort();
 
-    const journal: PostedJournal = {
-      id: randomUUID(),
-      kind: draft.kind,
-      referenceId: draft.referenceId,
-      ...(draft.description ? { description: draft.description } : {}),
-      postedAt: new Date(),
-      entries,
-    };
+    // The overdraft check and the write must be one atomic unit, or two
+    // concurrent transfers can both pass the check and overdraw the account.
+    // Codes are sorted so concurrent posts acquire locks in the same order and
+    // cannot deadlock against each other.
+    return this.store.withAccountLocks(touched, async (locked) => {
+      await this.assertNoOverdraft(entries, accounts, locked);
 
-    return this.store.append(journal);
+      const journal: PostedJournal = {
+        id: randomUUID(),
+        kind: draft.kind,
+        referenceId: draft.referenceId,
+        ...(draft.description ? { description: draft.description } : {}),
+        postedAt: new Date(),
+        entries,
+      };
+
+      return locked.append(journal);
+    });
   }
 
   private async resolveAccounts(
@@ -116,9 +140,10 @@ export class PostingEngine {
   private async assertNoOverdraft(
     entries: readonly PostedEntry[],
     accounts: Map<string, LedgerAccount>,
+    store: LedgerStore = this.store,
   ): Promise<void> {
     const touched = [...new Set(entries.map((e) => e.accountCode))];
-    const existing = await this.store.entriesFor(touched);
+    const existing = await store.entriesFor(touched);
 
     for (const code of touched) {
       const account = accounts.get(code)!;
@@ -172,6 +197,14 @@ export class InMemoryLedgerStore implements LedgerStore {
   async append(journal: PostedJournal): Promise<PostedJournal> {
     this.journals.push(journal);
     return journal;
+  }
+
+  /** Single-threaded and in-process: nothing can interleave, so no lock is needed. */
+  async withAccountLocks<T>(
+    _accountCodes: readonly string[],
+    fn: (store: LedgerStore) => Promise<T>,
+  ): Promise<T> {
+    return fn(this);
   }
 
   allEntries(): PostedEntry[] {

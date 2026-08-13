@@ -16,6 +16,7 @@
     "typecheck": "tsc -b"
   },
   "dependencies": {
-    "@arc/contracts": "workspace:*"
+    "@arc/contracts": "workspace:*",
+    "@arc/db": "workspace:*"
   }
 }

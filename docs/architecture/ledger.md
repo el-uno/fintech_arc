@@ -239,8 +239,46 @@ A suite that passes when the code is broken proves nothing. These do not.
 
 ---
 
+## Concurrency
+
+The database triggers enforce that a journal **balances**. They say nothing about an account staying above its **floor** — that check is arithmetic over prior entries, which no constraint can express.
+
+So the overdraft check and the write must be one atomic unit:
+
+```
+withAccountLocks(sortedCodes, async (locked) => {
+  assertNoOverdraft(...)   // reads balances
+  locked.append(journal)   // writes entries
+})
+```
+
+`PrismaLedgerStore` implements this as a transaction opening with `SELECT … FOR UPDATE` on the touched accounts. Account codes are **sorted** by the posting engine, so concurrent posts acquire locks in the same order and cannot deadlock.
+
+Two integration tests pin it, against a real database:
+
+| Test                                  | Asserts                                                        |
+| ------------------------------------- | -------------------------------------------------------------- |
+| Two concurrent €80 spends from €100   | exactly one succeeds, balance ends at €20, never negative      |
+| Eight concurrent €30 spends from €100 | exactly three succeed, balance ends at €10, trial balance zero |
+
+Removing the `FOR UPDATE` while keeping the transaction makes the burst test fail — verified by mutation.
+
+The in-memory store passes straight through, which is correct: it is single-threaded and nothing can interleave.
+
+---
+
+## Storage limits
+
+Ledger amounts and overdraft floors are Postgres `BIGINT` — signed 64-bit, so the ceiling is **9,223,372,036,854,775,807 minor units**.
+
+For Arc's assets that is ample: a trillion USDC at 6 decimals, or 9.2 ETH in wei. But an 18-decimal balance above ~9.2 tokens would exceed it, and a system holding large 18-decimal positions needs `NUMERIC(78,0)` columns instead.
+
+`PrismaLedgerStore` checks this explicitly and raises a domain error naming the limit, rather than letting a cryptic driver error surface. This was found by running the scenario for real — the in-memory store has no such ceiling and never would have shown it.
+
+---
+
 ## What is not here yet
 
-- **The Prisma-backed store.** The engine runs against `InMemoryLedgerStore`; the schema, constraints and triggers are live and verified, but the adapter that connects them arrives with Phase 2, when there are real accounts to persist.
-- **Holds are modelled, not yet wired.** The table and the `available = posted − reserved` projection exist; quote-time reservation belongs to Phase 4.
+- **Holds are modelled, not yet wired.** The table and the `available = posted − reserved` projection exist; quote-time reservation belongs with the transfer API.
 - **Reconciliation and reporting** are Phase 8.
+- **Balance snapshots.** Every balance is a full fold over entries. Correct, and fine at simulation scale; real volume wants periodic snapshots to fold forward from.

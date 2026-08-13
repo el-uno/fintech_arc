@@ -8,6 +8,7 @@
   "references": [
     { "path": "../../packages/money" },
     { "path": "../../packages/contracts" },
-    { "path": "../../packages/bus" }
+    { "path": "../../packages/bus" },
+    { "path": "../../packages/db" }
   ]
 }
