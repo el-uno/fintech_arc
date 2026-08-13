@@ -138,8 +138,7 @@ This is the reason [money is an integer count of minor units](/architecture/mone
 
 ---
 
-## Worked example {#worked-example}
-
+## Worked example
 €1,000.00 from Germany to a Kenyan mobile-money wallet. Three journals; every one balances in every currency it touches.
 
 <Tabs>
@@ -243,8 +242,7 @@ There is also a **known race**: between the balance read and the append, a concu
 
 ---
 
-## Enforced twice, on purpose {#enforced-twice-on-purpose}
-
+## Enforced twice, on purpose
 The posting engine refuses to write an unbalanced journal. The **database refuses too, independently.**
 
 This is deliberate duplication. An invariant that depends on every future developer remembering to go through the right class is not an invariant: it is a convention, and conventions erode.
