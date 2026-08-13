@@ -149,6 +149,7 @@ The chain simulator's determinism is not a nicety: it is what makes several of t
 - The property suite runs against the in-memory store for speed. `PrismaLedgerStore` exists and the database constraints are verified by raw SQL against a live database, but the property suite and the real constraints are not yet exercised together in a single run.
 - There is a **race** between the overdraft balance read and the append. Single-threaded and in-memory it cannot occur; `PrismaLedgerStore` must close it with `SELECT … FOR UPDATE` or a serializable transaction. The database's balance trigger catches unbalanced journals but **not** a race that overdraws an account.
 - Compliance-blocked paths are not yet in the chaos suite, because the real `CompliancePort` implementation is not wired.
+
 </div>
 
 ---

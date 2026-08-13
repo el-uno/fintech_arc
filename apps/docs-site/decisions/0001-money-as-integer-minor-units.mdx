@@ -72,6 +72,7 @@ Two files carry a scoped exception with a written justification: the seeded PRNG
 - **Callers must choose a rounding mode explicitly.** More verbose. That verbosity *is* the point: a rounding mode chosen by default is a rounding mode nobody reviewed.
 - **Ergonomic cost.** `Money.multiply(rate)` is more typing than `amount * rate`, and every contributor has to learn the type before they can write a line of monetary code.
 - **Third-party interop.** Anything handing back a float must be converted at the edge, carefully, once.
+
 </div>
 
 ---

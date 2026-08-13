@@ -1,14 +1,6 @@
 import type { EventBus } from './bus.js';
 import type { Outbox } from './outbox.js';
 
-/**
- * Records which (handler, event) pairs have already run.
- *
- * Delivery is at-least-once, so a handler *will* occasionally see the same event
- * twice — after a crash, or after one handler fails and the batch is retried.
- * This log makes redelivery a no-op for handlers that have already succeeded,
- * which is what turns at-least-once delivery into effectively-once processing.
- */
 export interface ProcessedLog {
   has(handlerName: string, eventId: string): Promise<boolean>;
   record(handlerName: string, eventId: string): Promise<void>;
@@ -31,11 +23,8 @@ export class InMemoryProcessedLog implements ProcessedLog {
 }
 
 export interface DispatcherOptions {
-  /** Events per drain pass. */
   batchSize?: number;
-  /** Give up after this many attempts and leave the event for manual review. */
   maxAttempts?: number;
-  /** Base retry delay; grows exponentially with attempt count. */
   baseRetryDelayMs?: number;
   now?: () => number;
 }
@@ -48,14 +37,6 @@ export interface DrainResult {
   exhausted: number;
 }
 
-/**
- * Drains the outbox and invokes handlers.
- *
- * An event is marked delivered only when *every* subscribed handler has either
- * succeeded or was already recorded as having succeeded. If any handler throws,
- * the event stays pending and is retried with exponential backoff — and on
- * retry, the handlers that already succeeded are skipped rather than re-run.
- */
 export class Dispatcher {
   private readonly batchSize: number;
   private readonly maxAttempts: number;
@@ -112,8 +93,6 @@ export class Dispatcher {
 
       const nextAttempt = record.attempts + 1;
       if (nextAttempt >= this.maxAttempts) {
-        // Park it. A poisoned event must not block the queue, and it must not
-        // be silently dropped either — it becomes an operational case.
         await this.outbox.markFailed(
           event.id,
           errors.join('; '),
@@ -131,7 +110,6 @@ export class Dispatcher {
     return result;
   }
 
-  /** Drain repeatedly until nothing is left to deliver. Used by tests and scenarios. */
   async drainUntilEmpty(maxPasses = 100): Promise<DrainResult[]> {
     const passes: DrainResult[] = [];
     for (let i = 0; i < maxPasses; i++) {

@@ -279,6 +279,7 @@ The chaos suite fails each of the five steps in turn and asserts:
 - **Holds.** The ledger models them (`available = posted − reserved`) but the saga debits directly rather than reserving at quote time.
 - **Recovery beyond compensation.** If a reversal itself fails, the saga returns `compensation_failed` and stops. A real system escalates that to an operational case: Phase 8.
 - **On-chain irreversibility.** Reversing `settle` is a ledger-level compensation representing funds recovered from the settlement partner, not an on-chain reversal. Nothing un-sends a confirmed transaction.
+
 </div>
 
 <CardGroup cols={2}>

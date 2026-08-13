@@ -15,16 +15,6 @@ export class CurrencyMismatchError extends MoneyError {
   }
 }
 
-/**
- * An exact monetary amount: an integer count of a currency's minor units.
- *
- * €100.00 is `Money.of(10000n, 'EUR')` — ten thousand cents, not the float 100.0.
- * Every operation here is integer arithmetic and therefore exact. There is no
- * method that accepts a `number`, by design: the only way to introduce float
- * error is to have a float in the first place.
- *
- * Instances are immutable; every operation returns a new Money.
- */
 export class Money {
   private constructor(
     readonly amount: bigint,
@@ -33,9 +23,6 @@ export class Money {
     Object.freeze(this);
   }
 
-  // ---------------------------------------------------------------- construction
-
-  /** Construct from a count of minor units. */
   static of(amount: bigint, code: CurrencyCode): Money {
     if (typeof amount !== 'bigint') {
       throw new MoneyError('amount must be a bigint of minor units');
@@ -47,13 +34,6 @@ export class Money {
     return new Money(0n, code);
   }
 
-  /**
-   * Parse an exact decimal string: `Money.parse('100.00', 'EUR')`.
-   *
-   * Rejects more fractional digits than the currency has, rather than rounding
-   * silently. If a caller has excess precision, they must decide explicitly what
-   * to do with it — this constructor will not decide for them.
-   */
   static parse(decimal: string, code: CurrencyCode): Money {
     const match = /^(-)?(\d+)(?:\.(\d+))?$/.exec(decimal.trim());
     if (!match) {
@@ -74,8 +54,6 @@ export class Money {
     return new Money(sign === '-' ? -magnitude : magnitude, code);
   }
 
-  // ------------------------------------------------------------------ arithmetic
-
   add(other: Money): Money {
     this.assertSameCurrency(other);
     return new Money(this.amount + other.amount, this.currency);
@@ -94,27 +72,14 @@ export class Money {
     return this.amount < 0n ? this.negate() : this;
   }
 
-  /** Scale by a whole number. Fractional scaling goes through `Rate` or `applyBps`. */
   multiply(factor: bigint): Money {
     return new Money(this.amount * factor, this.currency);
   }
 
-  /**
-   * Apply a rate in basis points (1 bp = 0.01%). Used for percentage fees.
-   * `Money.parse('100.00','EUR').applyBps(150n, 'HALF_EVEN')` → €1.50.
-   */
   applyBps(basisPoints: bigint, mode: RoundingMode): Money {
     return new Money(divRound(this.amount * basisPoints, 10_000n, mode), this.currency);
   }
 
-  /**
-   * Split across integer weights so that the parts sum *exactly* back to the whole.
-   *
-   * The remainder left by truncation is distributed one minor unit at a time,
-   * in weight order. This is how a €100.00 payment is split into fee components
-   * without a cent appearing or vanishing. The sum invariant is unconditional
-   * and is covered by a property test.
-   */
   allocate(weights: readonly bigint[]): Money[] {
     if (weights.length === 0) {
       throw new MoneyError('allocate requires at least one weight');
@@ -139,15 +104,12 @@ export class Money {
     return shares.map((s) => new Money(s, this.currency));
   }
 
-  /** Split into `n` as-equal-as-possible parts that sum exactly to the whole. */
   split(parts: number): Money[] {
     if (!Number.isInteger(parts) || parts < 1) {
       throw new MoneyError('split requires a positive integer part count');
     }
     return this.allocate(Array.from({ length: parts }, () => 1n));
   }
-
-  // ----------------------------------------------------------------- comparison
 
   compare(other: Money): -1 | 0 | 1 {
     this.assertSameCurrency(other);
@@ -188,9 +150,6 @@ export class Money {
     return this.amount < 0n;
   }
 
-  // ------------------------------------------------------------------- rendering
-
-  /** Exact decimal representation, e.g. `-1234.05`. Never lossy. */
   toDecimalString(): string {
     const decimals = currency(this.currency).decimals;
     const negative = this.amount < 0n;
@@ -204,11 +163,6 @@ export class Money {
     return `${this.toDecimalString()} ${this.currency}`;
   }
 
-  /**
-   * Wire format. The amount stays a *string of minor units* — never a JSON
-   * number, which would be parsed back as a float by most clients and undo the
-   * entire point of this class.
-   */
   toJSON(): { amount: string; currency: CurrencyCode; decimals: number } {
     return {
       amount: this.amount.toString(),
@@ -221,7 +175,6 @@ export class Money {
     return new Money(BigInt(value.amount), value.currency);
   }
 
-  /** The scale factor between this currency's major and minor units. */
   get scale(): bigint {
     return scaleOf(this.currency);
   }
@@ -233,7 +186,6 @@ export class Money {
   }
 }
 
-/** Sum a list of same-currency amounts. An empty list needs an explicit currency. */
 export function sum(amounts: readonly Money[], code?: CurrencyCode): Money {
   if (amounts.length === 0) {
     if (!code) throw new MoneyError('cannot sum an empty list without a currency');

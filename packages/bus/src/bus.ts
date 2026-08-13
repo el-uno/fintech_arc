@@ -16,7 +16,6 @@ export class BusError extends Error {
   }
 }
 
-/** Ambient facts every event inherits from the request or saga that produced it. */
 export interface PublishContext {
   tenantId: string;
   correlationId: string;
@@ -30,22 +29,11 @@ export type EventHandler<T extends EventType = EventType> = (
 ) => Promise<void>;
 
 export interface Subscription {
-  /** Stable name. Used to record which handlers have already seen an event. */
   readonly name: string;
   readonly type: EventType;
-  /**
-   * Accepts any catalogue event. The dispatcher only ever invokes a handler with
-   * an event whose `type` matches its subscription, so the narrowing performed
-   * at `subscribe` time is sound.
-   */
   readonly handle: (event: AnyDomainEvent) => Promise<void>;
 }
 
-/**
- * Build a validated event. Payloads are checked against the catalogue *before*
- * they are staged, so a malformed event can never reach the outbox — a bad
- * publish fails loudly at the producer rather than quietly at every consumer.
- */
 export function createEvent<T extends EventType>(
   type: T,
   payload: PayloadOf<T>,
@@ -77,14 +65,6 @@ export function createEvent<T extends EventType>(
   return { ...envelope, type, payload: parsed.data } as DomainEvent<T, PayloadOf<T>>;
 }
 
-/**
- * The in-process event bus.
- *
- * Publishing only *stages* events — nothing is delivered until the dispatcher
- * runs. That separation is what makes the outbox guarantee hold, and it means a
- * caller can publish inside a transaction without any risk of a consumer
- * observing state the transaction later rolls back.
- */
 export class EventBus {
   private readonly subscriptions: Subscription[] = [];
 
@@ -97,8 +77,7 @@ export class EventBus {
     this.subscriptions.push({
       name,
       type,
-      // Sound because `subscribersFor` only returns handlers whose `type` matches
-      // the event being dispatched.
+      // Sound: subscribersFor only returns handlers whose type matches the event.
       handle: handle as (event: AnyDomainEvent) => Promise<void>,
     });
   }
@@ -107,7 +86,6 @@ export class EventBus {
     return this.subscriptions.filter((s) => s.type === type);
   }
 
-  /** Stage events for delivery. Returns what was staged, for correlation. */
   async publish(events: readonly AnyDomainEvent[]): Promise<readonly AnyDomainEvent[]> {
     await this.outbox.stage(events);
     return events;
@@ -119,9 +97,8 @@ export class EventBus {
     context: PublishContext,
   ): Promise<DomainEvent<T, PayloadOf<T>>> {
     const event = createEvent(type, payload, context);
-    // TypeScript cannot prove that an uninstantiated `DomainEvent<T>` is a member
-    // of the union, though every concrete instantiation is. The payload has already
-    // been validated against the catalogue by `createEvent`.
+    // TS cannot prove an uninstantiated DomainEvent<T> is in the union; every
+    // concrete instantiation is, and createEvent has already validated it.
     await this.publish([event as AnyDomainEvent]);
     return event;
   }

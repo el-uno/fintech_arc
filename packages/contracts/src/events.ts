@@ -1,20 +1,6 @@
 import { z } from 'zod';
 import { MoneySchema, type DomainEvent } from './envelope.js';
 
-/**
- * The event catalogue — the seam between Arc's six bounded contexts.
- *
- * Contexts do not import each other's code. They communicate by publishing and
- * consuming these events, and every one is validated at the boundary. Adding a
- * field is backwards-compatible; removing or retyping one requires a new
- * `version` on the envelope.
- *
- * This is the Phase 0 seed. Each later phase adds the events it needs and the
- * contract tests that pin them.
- */
-
-// ---------------------------------------------------------------- product
-
 export const AccountOpenedSchema = z.object({
   accountId: z.string().uuid(),
   ownerId: z.string().uuid(),
@@ -28,7 +14,6 @@ export const VirtualAccountIssuedSchema = z.object({
   accountId: z.string().uuid(),
   currency: z.string().min(3).max(5),
   rail: z.enum(['sepa', 'faster_payments', 'nip', 'mobile_money', 'eft', 'onchain']),
-  /** IBAN, NUBAN, mobile-money handle, or chain address depending on rail. */
   identifier: z.string().min(1),
 });
 
@@ -41,16 +26,12 @@ export const TransferRequestedSchema = z.object({
   corridor: z.string().regex(/^[A-Z]{2}-[A-Z]{2}$/, 'corridor must be like DE-KE'),
 });
 
-// ---------------------------------------------------------------- compliance
-
 export const ComplianceDecidedSchema = z.object({
   subjectId: z.string().uuid(),
   subjectType: z.enum(['account', 'transfer', 'counterparty']),
   decision: z.enum(['approved', 'rejected', 'review']),
-  /** Rules that fired. Empty on a clean pass. */
   reasons: z.array(z.string()),
   riskScore: z.number().int().min(0).max(100),
-  /** Present when a human decided rather than the rule engine. */
   reviewerId: z.string().uuid().optional(),
 });
 
@@ -61,8 +42,6 @@ export const CaseOpenedSchema = z.object({
   priority: z.enum(['low', 'normal', 'high', 'urgent']),
   slaExpiresAt: z.string().datetime(),
 });
-
-// ---------------------------------------------------------------- movement
 
 export const SettlementStartedSchema = z.object({
   transferId: z.string().uuid(),
@@ -89,15 +68,11 @@ export const PayoutCompletedSchema = z.object({
 export const ReversalRequestedSchema = z.object({
   transferId: z.string().uuid(),
   reason: z.enum(['recall', 'return', 'failed_payout', 'compliance_hold', 'chargeback']),
-  /** The step that failed, for the compensating action to target. */
   failedStep: z.string().min(1),
 });
 
-// ---------------------------------------------------------------- ledger
-
 export const JournalPostedSchema = z.object({
   journalId: z.string().uuid(),
-  /** What the journal records — the business reason for the entries. */
   kind: z.enum(['transfer', 'fee', 'fx', 'reversal', 'rounding', 'settlement']),
   entries: z
     .array(
@@ -111,8 +86,6 @@ export const JournalPostedSchema = z.object({
   referenceId: z.string().uuid(),
 });
 
-// ---------------------------------------------------------------- platform
-
 export const WebhookDeliveryAttemptedSchema = z.object({
   deliveryId: z.string().uuid(),
   endpointId: z.string().uuid(),
@@ -122,12 +95,6 @@ export const WebhookDeliveryAttemptedSchema = z.object({
   responseStatus: z.number().int().optional(),
 });
 
-// ---------------------------------------------------------------- catalogue
-
-/**
- * The registry. `publish` accepts only these names, and validates the payload
- * against the matching schema before anything reaches the bus.
- */
 export const EVENT_CATALOGUE = {
   'account.opened': AccountOpenedSchema,
   'virtual_account.issued': VirtualAccountIssuedSchema,
@@ -156,13 +123,6 @@ export function schemaFor<T extends EventType>(type: T): (typeof EVENT_CATALOGUE
   return EVENT_CATALOGUE[type];
 }
 
-/**
- * Any event in the catalogue, as a discriminated union on `type`.
- *
- * This is what the bus and outbox carry. Narrowing on `type` gives the caller
- * the matching payload type for free, so a handler cannot read a field that its
- * event does not have.
- */
 export type AnyDomainEvent = {
   [T in EventType]: DomainEvent<T, PayloadOf<T>>;
 }[EventType];
