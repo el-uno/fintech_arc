@@ -132,6 +132,44 @@ apps/docs-site/    This site
 
 ---
 
+## Poke at it
+
+Reading a passing test suite proves less than breaking it. Run the watcher and make the system object:
+
+```bash
+pnpm test:watch
+```
+
+<AccordionGroup>
+  <Accordion title="Break a journal by one cent" icon="scale-unbalanced">
+    In `services/ledger/test/posting.test.ts`, change a credit so it no longer matches its debit. The
+    error names the currency and the exact difference. There is no tolerance to widen: a single minor
+    unit is a rejection, which is the whole reason money is an integer count rather than a float.
+  </Accordion>
+
+  <Accordion title="Force a sandbox failure with a magic amount" icon="triangle-exclamation">
+    In `apps/api/test/last-mile.test.ts`, send `100066` instead of `100000`. The last two minor units
+    are read as an instruction, and `…66` means the payout rail rejects. Watch the saga compensate and
+    the ledger still balance. Try `…61` for a compliance block and `…68` for a settlement that never
+    reaches finality.
+  </Accordion>
+
+  <Accordion title="Remove the row locking" icon="lock-open">
+    Delete the `SELECT … FOR UPDATE` from `withAccountLocks` in
+    `services/ledger/src/prisma-store.ts`, keeping the transaction. The unit tests still pass. The
+    concurrency test does not: eight simultaneous spends against a balance that funds three will
+    overdraw the account.
+  </Accordion>
+
+  <Accordion title="Try to edit history" icon="database">
+    Connect with `psql` and `UPDATE` a row in `ledger_entry`. The database refuses: entries are
+    append-only, and a correction is a new opposing journal rather than an edit. The same applies to
+    `DELETE`.
+  </Accordion>
+</AccordionGroup>
+
+---
+
 ## Where to go next
 
 <CardGroup cols={2}>

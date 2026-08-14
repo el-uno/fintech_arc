@@ -16,7 +16,7 @@ Arc models the backend of a payments business that moves money between Europe an
 
 ## Status
 
-Arc is being built in phases. **All phases are complete.** Everything below marked _planned_ is designed in [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md) but not yet implemented — this section is kept honest as the build progresses.
+Arc was built in ten phases, all complete. The plan they followed is in [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md). What each phase deliberately left unbuilt is stated at the end of the page that describes it, rather than implied.
 
 | Phase | Scope                                                                     | Status      |
 | ----- | ------------------------------------------------------------------------- | ----------- |
@@ -130,10 +130,12 @@ Every step has a **compensating action**, and this is now enforced: the chaos su
 
 ---
 
-## Quickstart
+## Try it yourself
+
+Five commands from a clean clone to watching a corridor transfer post its journals. Verified from an empty directory, not from a working tree.
 
 ```bash
-pnpm install
+git clone https://github.com/el-uno/fintech_arc.git && cd fintech_arc && pnpm install
 ```
 
 ```bash
@@ -152,10 +154,22 @@ pnpm verify
 pnpm dev
 ```
 
-`pnpm verify` runs the whole gate: format, lint, typecheck, architecture boundaries, documentation integrity, and tests.
-`pnpm dev` runs one corridor transfer end to end against Postgres and prints every journal it posts, plus the trial balance.
+**Requires** Node 22+, pnpm 9, Docker. Nothing else — no cloud account, no API keys, no testnet faucet. Every external system is a deterministic simulator.
 
-**Requires** Node 22+, pnpm 9, Docker.
+### What each command proves
+
+| Command       | What you get                                                                                                                                                              |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm verify` | The full gate: format, lint, typecheck, architecture boundaries, documentation integrity, and **387 tests** — 18 of which run against real Postgres                       |
+| `pnpm dev`    | One EUR→KES transfer end to end: quote, compliance, reserve, swap, on-chain settlement, payout. Every journal printed entry by entry, then the trial balance per currency |
+
+`pnpm dev` exits non-zero if any currency fails to balance, which is why CI runs it as a step rather than trusting the unit tests alone.
+
+### Poke at it
+
+Reading a passing suite proves less than breaking it. `pnpm test:watch`, then try breaking a journal by one cent, forcing a sandbox failure with a magic amount, removing the row locking, or `UPDATE`-ing a posted ledger entry in `psql`. Each one is refused by a different mechanism, and the site walks through all four.
+
+**Full walkthrough:** [arc-doc.mintlify.site/start/quickstart](https://arc-doc.mintlify.site/start/quickstart)
 
 ---
 

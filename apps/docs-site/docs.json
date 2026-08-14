@@ -164,6 +164,10 @@
   "navbar": {
     "links": [
       {
+        "label": "Run it locally",
+        "href": "/start/quickstart"
+      },
+      {
         "label": "Build plan",
         "href": "https://github.com/el-uno/fintech_arc/blob/main/docs/BUILD_PLAN.md"
       }

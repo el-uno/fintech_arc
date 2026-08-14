@@ -4,7 +4,9 @@ coverage/
 *.tsbuildinfo
 .env
 .env.*
-.env.example
+# Tracked on purpose: it is the template `cp .env.example .env` copies from, and
+# it holds only local Docker defaults. Ignoring it would break the quickstart.
+!.env.example
 .DS_Store
 prisma/generated/
 
