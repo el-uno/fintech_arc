@@ -237,7 +237,7 @@ A customer with €1,000 posted and a €250 active hold can spend €750. Showi
 <div className="arc-gap">
 **Holds are modelled, not yet wired.** The table and the projection exist; the saga currently debits directly rather than reserving at quote time. Wiring them belongs with the transfer API.
 
-There is also a **known race**: between the balance read and the append, a concurrent journal could spend the same funds. In-memory and single-threaded this cannot happen. `PrismaLedgerStore` must close it with `SELECT … FOR UPDATE` on the touched accounts or a serializable transaction, because the database's balance trigger catches unbalanced journals but does **not** catch a race that overdraws an account.
+There **was** a race here, closed in Phase 6.5: between the balance read and the append, a concurrent journal could spend the same funds. The database's balance trigger does not catch it, because it enforces that a journal balances, not that an account stayed above its floor. `LedgerStore` now exposes `withAccountLocks`, and `PrismaLedgerStore` implements it as a transaction opening with `SELECT … FOR UPDATE` on the touched rows. Account codes are sorted by the posting engine so concurrent posts acquire in the same order and cannot deadlock. Two integration tests pin it: two concurrent €80 spends from €100 leave exactly one winner, and eight concurrent €30 spends leave exactly three.
 </div>
 
 ---
@@ -326,9 +326,9 @@ A suite that passes when the code is broken proves nothing. These do not.
 ## What is not here yet
 
 <div className="arc-gap">
-- **The `PrismaLedgerStore` adapter now exists**, so the engine is no longer in-memory only. The fast test suite still runs against the in-memory store by choice.
 - **Holds at quote time**, as described above.
-- **Reconciliation and reporting**: three-way reconciliation against bank statements and on-chain history, trial balance, corridor P&L. Phase 8.
+- **Balance snapshots.** Every balance is a full fold over entries. Correct, and fine at this scale; real volume wants periodic snapshots to fold forward from.
+- **The int64 ceiling.** Amounts are Postgres `BIGINT`, so the limit is 9.2e18 minor units — ample for 6-decimal assets, but an 18-decimal balance above ~9.2 tokens would exceed it and needs `NUMERIC(78,0)`.
 
 </div>
 

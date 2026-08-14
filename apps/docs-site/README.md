@@ -97,7 +97,15 @@ likely to go stale as the build progresses:
 
 | When this lands | Update |
 | --- | --- |
-| Prisma-backed `LedgerStore` | `architecture/ledger.mdx`, `architecture/testing.mdx` gaps |
 | Holds wired at quote time | `architecture/ledger.mdx`, `architecture/settlement-saga.mdx` |
-| Real `CompliancePort` replaces `AlwaysApprove` | `architecture/compliance.mdx` |
-| Phase 6 to 8 | Status tables, `decisions/index.mdx` planned ADRs |
+| Real `CompliancePort` replaces `AlwaysApprove` as the saga default | `architecture/compliance.mdx` |
+| An HTTP server around `createApi` | `architecture/partner-platform.mdx` gaps |
+| Scheduled reconciliation runs | `architecture/reconciliation.mdx` gaps |
+| Any new phase | Status table in `index.mdx` **and** the context table in `architecture/overview.mdx` |
+
+Done, and no longer pending: the Prisma-backed `LedgerStore` and its concurrency locking
+(Phase 6.5), reconciliation and reporting (Phase 8), and all seven planned ADRs (Phase 9).
+
+`pnpm run docs:check` in the repo root guards the mechanical part — a repo stub that grows
+back into a second copy, a nav entry with no page, or a page unreachable from the nav. It
+cannot catch a stale sentence, which is what this table is for.
