@@ -1,0 +1,43 @@
+---
+title: "ADR 0007: Row-Level Tenancy With Environment-Prefixed Credentials"
+sidebarTitle: "ADR 0007"
+description: "How partner data is isolated: a tenant on every record, sandbox tenants distinguishable by prefix, and per-tenant rate limiting and idempotency scoping."
+icon: "users-between-lines"
+keywords: ["multi-tenancy", "tenant isolation", "sandbox environment", "API key prefixes", "per-tenant rate limiting"]
+---
+
+<span className="arc-eyebrow">ADR 0007 · Accepted · Phase 7</span>
+
+<Info>
+**Status:** Accepted · **Phase:** 7 · **Supersedes:** none · **Superseded by:** none
+</Info>
+
+## Context
+
+Arc serves its own customers and partner fintechs from one deployable. Partner data must not leak across boundaries, and every partner needs a sandbox that is genuinely isolated from live.
+
+## Decision
+
+**A tenant on every record and every event.** The event envelope carries `tenantId`; ledger accounts, journals, outbox rows and idempotency keys are all tenant-scoped.
+
+**Sandbox tenants are prefixed** (`sbx_…`) and detectable with `isSandboxTenant`, which is what gates sandbox-only behaviour such as magic-amount failure injection and `POST /v1/sandbox/reset`.
+
+**Credentials are environment-prefixed**: `ak_test_` / `sk_test_` versus `ak_live_` / `sk_live_`.
+
+Rate limits and idempotency keys are scoped per tenant, so one partner cannot exhaust another's budget or collide with another's keys.
+
+## Consequences
+
+**Good.** One deployable, one migration path, one set of code to reason about. A key pasted into the wrong environment is *visibly* wrong rather than quietly wrong. Sandbox behaviour is decided by tenant, not by a request flag, so the sandbox exercises the same code path production does.
+
+**Costs.** Isolation is enforced by discipline in queries rather than by physical separation — a missing tenant predicate is a leak, and nothing in the schema prevents one. Postgres row-level security would make it structural and is not implemented. Noisy-neighbour effects are bounded by rate limiting but not eliminated.
+
+**Sandbox reset does not clear the ledger** — it clears quotes and transfers only. That is a known gap, not a design position.
+
+## Alternatives
+
+*A database per tenant* — the strongest isolation, and unworkable for a simulation and heavy for a small partner base. Worth revisiting at scale for large partners.
+
+*A schema per tenant* — migrations multiply by tenant count; the operational cost outweighs the isolation benefit at this size.
+
+*A separate deployment for sandbox* — doubles the infrastructure and, worse, allows sandbox and live to drift apart in behaviour, which defeats the purpose of a sandbox.

@@ -74,6 +74,11 @@ jobs:
       - name: Architecture boundaries
         run: pnpm boundaries
 
+      # Fails if a repo stub grows back into a second copy of a site page, if the
+      # nav references a missing page, or if a page is unreachable from the nav.
+      - name: Documentation integrity
+        run: pnpm run docs:check
+
       - name: Migrate
         run: pnpm prisma migrate deploy --schema prisma/schema.prisma
 

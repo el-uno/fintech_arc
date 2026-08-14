@@ -1,0 +1,41 @@
+---
+title: "ADR 0006: A Compensating Saga Rather Than Two-Phase Commit"
+sidebarTitle: "ADR 0006"
+description: "Why a corridor transfer is a saga with a compensating action per step, given that banks and blockchains do not participate in distributed transactions."
+icon: "diagram-project"
+keywords: ["saga pattern", "compensating transactions", "two-phase commit", "distributed transactions", "payment orchestration", "chaos testing"]
+---
+
+<span className="arc-eyebrow">ADR 0006 · Accepted · Phase 4</span>
+
+<Info>
+**Status:** Accepted · **Phase:** 4 · **Supersedes:** none · **Superseded by:** none
+</Info>
+
+## Context
+
+A corridor transfer spans a database, a blockchain and a bank rail. It must debit a sender, convert currency, settle on-chain, and pay out — and any step can fail.
+
+## Decision
+
+An explicit **saga**: `compliance → reserve → swap → settle → payout`, each step with an `execute` and a `compensate`. On failure the saga walks the completed steps **backwards** and compensates each.
+
+A compensation is the **exact reverse of the journal that step posted** — every direction flipped, same accounts, same amounts.
+
+## Consequences
+
+**Good.** Compensation is safe by *arithmetic* rather than by careful coding: if the original journal balanced, its reversal balances, so a compensation can never itself unbalance the ledger. That matters because the compensation path only runs when something has already gone wrong.
+
+The claim is enforced. The chaos suite fails each of the five steps in turn and asserts the ledger balances in every currency, the sender's balance is exactly unchanged, and every intermediate account returns to zero.
+
+**Order is asserted separately, and had to be.** For the ledger alone, order is irrelevant — reversals commute. Mutation testing showed compensating *forward* passed every test. It is still wrong: the rail recall must precede the settlement unwind, and each reversal must describe the step it actually undoes. **Balance is necessary but not sufficient — an audit trail can be false while the arithmetic is true.**
+
+**Costs.** There is no isolation: a partially completed transfer is observable between steps. Reversing the on-chain leg is a *ledger-level* compensation representing funds recovered from the settlement partner — nothing un-sends a confirmed transaction, and the gas fee is deliberately never reversed because it was really spent.
+
+## Alternatives
+
+*Two-phase commit* — impossible. Banks and blockchains do not enrol in a distributed transaction, and no coordinator can hold a prepare across a chain finality window.
+
+*Best-effort with manual cleanup* — what many systems do, and what produces reconciliation breaks nobody can explain.
+
+*Reserving with holds instead of debiting* — complementary rather than alternative; the ledger models holds and wiring them at quote time is still open.

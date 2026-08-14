@@ -67,7 +67,9 @@
             "pages": [
               "architecture/overview",
               "architecture/money",
-              "architecture/contexts-and-events"
+              "architecture/contexts-and-events",
+              "architecture/security",
+              "architecture/partner-platform"
             ]
           },
           {
@@ -77,7 +79,8 @@
               "architecture/ledger",
               "architecture/chain-layer",
               "architecture/settlement-saga",
-              "architecture/compliance"
+              "architecture/compliance",
+              "architecture/reconciliation"
             ]
           },
           {
@@ -102,7 +105,12 @@
             "pages": [
               "decisions/index",
               "decisions/0001-money-as-integer-minor-units",
-              "decisions/0002-modular-monolith"
+              "decisions/0002-modular-monolith",
+              "decisions/0003-double-entry-ledger",
+              "decisions/0004-chain-abstraction",
+              "decisions/0005-idempotency-strategy",
+              "decisions/0006-saga-over-two-phase-commit",
+              "decisions/0007-multi-tenancy-model"
             ]
           }
         ]

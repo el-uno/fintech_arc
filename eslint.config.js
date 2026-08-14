@@ -136,6 +136,15 @@ export default tseslint.config(
   },
 
   {
+    // Repo tooling scripts run in Node, not the browser.
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      globals: { console: 'readonly', process: 'readonly' },
+    },
+    rules: { 'no-console': 'off' },
+  },
+
+  {
     // CommonJS tooling configs (dependency-cruiser) run in Node's CJS scope.
     files: ['**/*.cjs'],
     languageOptions: {

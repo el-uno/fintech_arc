@@ -1,0 +1,44 @@
+---
+title: "ADR 0003: Double-Entry Accounting, Enforced by the Database"
+sidebarTitle: "ADR 0003"
+description: "Why Arc uses classical double-entry with balances derived from entries, and why the balance rule is enforced in Postgres as well as in application code."
+icon: "scale-balanced"
+keywords: ["double-entry accounting", "derived balances", "append-only ledger", "deferred constraint trigger", "ledger design decision"]
+---
+
+<span className="arc-eyebrow">ADR 0003 · Accepted · Phase 1</span>
+
+<Info>
+**Status:** Accepted · **Phase:** 1 · **Supersedes:** none · **Superseded by:** none
+</Info>
+
+## Context
+
+Arc must record money movement across six currencies and two settlement rails, and answer two different questions: *are the books consistent?* and *do we hold what we owe?* A single mutable balance per account answers neither — it cannot be audited, cannot be replayed, and gives no place to record why a number changed.
+
+## Decision
+
+Classical double-entry:
+
+- Every movement is a **journal** of two or more **entries** that balance, **per currency independently**.
+- **Balances are derived** by folding entries, never stored as a mutable column.
+- **Entries are append-only.** A correction is a new, opposing journal.
+- A customer's balance is a **liability**; the matching float is an **asset**.
+
+The balance rule is enforced **twice**: the posting engine validates before writing, and Postgres validates independently with a `DEFERRABLE INITIALLY DEFERRED` constraint trigger that fires at `COMMIT`.
+
+## Consequences
+
+**Good.** Every figure is reconstructible from the entry log. The audit trail is the data, not a parallel table that can disagree with it. Duplicated enforcement means the invariant survives a migration script or a `psql` session during an incident — an invariant that depends on every future developer using the right class is a convention, not an invariant.
+
+**Costs.** Reads are folds, so balances get more expensive as history grows; real volume needs periodic snapshots. Deferred triggers mean a violation surfaces at `COMMIT` rather than at the offending statement, which reads oddly until you know why.
+
+**Per-currency balance** is the subtle part. A journal converting EUR to USDC has two halves and each must close on its own — offsetting one against the other would be adding quantities of different things. FX position accounts bridge them, and the pair is where an unhedged exposure becomes visible.
+
+## Alternatives
+
+*Single mutable balance per account* — rejected. No audit trail, no replay, and concurrent updates need the same locking anyway.
+
+*Event sourcing with projections* — the entry log already is an event log with a fixed schema and a balance rule. Generic event sourcing would add machinery without adding a guarantee.
+
+*Application-only enforcement* — rejected after Phase 6.5: the database rules were unverified for six phases precisely because nothing exercised them. They are now covered by integration tests that write raw SQL.

@@ -1,0 +1,39 @@
+---
+title: "ADR 0004: A Chain-Agnostic Driver With a Deterministic Simulator"
+sidebarTitle: "ADR 0004"
+description: "Why settlement talks to a driver interface rather than a chain SDK, and why the default implementation is a seeded simulator rather than a testnet."
+icon: "link"
+keywords: ["chain abstraction", "blockchain driver interface", "deterministic simulator", "reorg testing", "finality depth", "chain-agnostic settlement"]
+---
+
+<span className="arc-eyebrow">ADR 0004 · Accepted · Phase 3</span>
+
+<Info>
+**Status:** Accepted · **Phase:** 3 · **Supersedes:** none · **Superseded by:** none
+</Info>
+
+## Context
+
+Arc settles in stablecoin and must not be wedded to one chain: cost, speed and liquidity differ per corridor and change over time. Settlement code also has to handle reorgs, stuck transactions, dropped transactions and reverts — none of which occur on demand against a real network.
+
+## Decision
+
+A `ChainDriver` interface — `broadcast`, `getTransaction`, `getConfirmations`, `estimateFee`, `head`, `subscribe` — with a **deterministic simulator** as the default implementation.
+
+Five chains are modelled with genuinely different characteristics: block time, finality depth, reorg depth, fee model and failure rates. `forceReorg(depth)` injects a reorg at an exact moment.
+
+## Consequences
+
+**Good.** The saga is written against finality, not against a vendor SDK. Failure paths are testable: a seeded run reproduces the same blocks, reorgs and transaction outcomes every time, so a reorg test is deterministic rather than flaky. Chain selection becomes a per-transfer decision instead of a deployment-time one.
+
+The modelling surfaces things a naive abstraction hides. **Polygon has 2-second blocks but needs 128 confirmations, so it settles slowest despite looking fastest.** And `failed` and `dropped` are different terminal states — a failed transaction was mined and consumed a fee; a dropped one never made it into a block and cost nothing. Compensation differs for each.
+
+**Costs.** The simulator is a model, and a model is wrong in ways you have not thought of. Real RPC behaviour — rate limits, inconsistent nodes, mempool visibility — is not represented at all.
+
+## Alternatives
+
+*A local testnet (Anvil/Hardhat)* — more realistic execution, but adds a required external process, slows the suite, and still cannot produce a deep reorg on cue.
+
+*Direct SDK calls per chain* — rejected. Every chain-specific detail would leak into the saga, and the failure paths would remain untested.
+
+*Simulator plus opt-in testnet driver* — attractive and still open. The interface is the point; a second implementation is additive.

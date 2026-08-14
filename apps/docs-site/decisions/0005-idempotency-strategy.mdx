@@ -1,0 +1,46 @@
+---
+title: "ADR 0005: Idempotency Keys, and Why a Reused Key Is a Conflict"
+sidebarTitle: "ADR 0005"
+description: "Why retrying a payout returns the original response, why the same key with a different body is a 409 rather than a cache hit, and why signatures carry a nonce."
+icon: "rotate-right"
+keywords: ["idempotency key", "safe retries", "409 conflict", "request signing nonce", "payment API retry semantics"]
+---
+
+<span className="arc-eyebrow">ADR 0005 · Accepted · Phase 6</span>
+
+<Info>
+**Status:** Accepted · **Phase:** 6 · **Supersedes:** none · **Superseded by:** none
+</Info>
+
+## Context
+
+Payment APIs are retried: networks time out, clients crash after sending and before reading, and callers retry on 5xx. A retry that creates a second payout is the worst failure a payments API has.
+
+## Decision
+
+Callers supply an `Idempotency-Key`. The gateway stores the key with a **hash of the request** and the response, scoped per tenant, and distinguishes three cases:
+
+| Situation | Behaviour |
+|---|---|
+| Same key, same body | replay the stored response; the handler runs once |
+| Same key, **different** body | `409 idempotency_conflict` |
+| Same key, still in flight | `409 in_progress` |
+| Handler threw | key released — a failure must stay retryable |
+
+Request signatures additionally carry a **per-request nonce**.
+
+## Consequences
+
+**Good.** A retry is safe, and the client gets the original outcome rather than a second effect. Downstream idempotency reinforces it: the chain driver and the bank rails are both idempotent on the caller's key, so even a partially completed saga does not double-broadcast or double-pay.
+
+**The conflict case is the one that matters.** Silently returning the first response when the body differs would hide a client bug behind a success, and the client would never learn its second, different request never happened.
+
+**The nonce was not in the original design.** Signatures covering only method, path, timestamp and body meant two identical requests in the same millisecond produced the same signature — so replay protection rejected a legitimate idempotent retry. Found by writing the retry test, not by reasoning about it.
+
+**Costs.** Keys need storage and expiry (24h). Clients that omit the key get no protection, and the API cannot force them.
+
+## Alternatives
+
+*Server-derived idempotency from a content hash alone* — rejected. Two genuinely distinct transfers with identical parameters are legitimate; only the caller knows whether it means "again" or "the same one".
+
+*Returning the first response on a body mismatch* — rejected as above: it converts a client bug into a silent wrong outcome.

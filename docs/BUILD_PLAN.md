@@ -258,9 +258,34 @@ Each phase ends with a working, demonstrable state and a merged PR. Nothing is "
 - Runbooks for stuck settlement, reorg, and reconciliation break.
 - **Done when:** an injected break is detected, cased, and resolvable by following the runbook alone.
 
-### Phase 9 — Documentation & public polish
+### Phase 9 — Documentation consolidation
 
-This is a first-class phase, not a cleanup pass. See §6.
+Rescoped. The original plan assumed the repo README and `docs/` would be the only
+documentation surface. A full documentation site was built in parallel at
+`apps/docs-site`, published to <https://arc-doc.mintlify.site>, which already
+covers the primer, architecture, flows, decisions and worked scenarios.
+
+Re-doing that as a "public polish" pass would have duplicated it. Worse, two
+surfaces explaining the same system **drift**, and a reader cannot tell which
+copy is stale.
+
+**The decision: the documentation site is canonical** for architecture and
+decisions. The repo keeps only what belongs next to code.
+
+- `docs/architecture/*.md` are **pointers** at the corresponding site page.
+- `docs/adr/README.md` indexes all seven ADRs on the site.
+- **Runbooks stay in the repo** — they are operational and reference code paths
+  directly.
+- `docs/BUILD_PLAN.md` stays here; it is a record of the build, not a product doc.
+
+**Enforced, not just intended.** `pnpm run docs:check` fails the build if a repo
+stub grows back into a second copy, if the site navigation references a missing
+page, or if a page is unreachable from the navigation. It runs in `pnpm verify`
+and in CI.
+
+**Closed in this phase:** five missing ADRs (double-entry, chain abstraction,
+idempotency, saga vs 2PC, multi-tenancy), and three architecture pages that
+existed only in the repo (reconciliation, platform/security, partner platform).
 
 ---
 

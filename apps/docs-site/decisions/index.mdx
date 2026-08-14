@@ -23,6 +23,21 @@ The value is in the parts that are uncomfortable to write. A record listing only
   <Card title="0002 · Modular monolith over microservices" icon="cubes" href="/decisions/0002-modular-monolith">
     **Phase 0.** One deployable, six bounded contexts, boundaries enforced by CI. Reads as microservices; runs with one command.
   </Card>
+  <Card title="0003 · Double-entry, enforced by the database" icon="scale-balanced" href="/decisions/0003-double-entry-ledger">
+    Balances derived from entries, entries append-only, and the balance rule enforced in Postgres as well as in code.
+  </Card>
+  <Card title="0004 · Chain-agnostic driver" icon="link" href="/decisions/0004-chain-abstraction">
+    Settlement talks to an interface, not a chain SDK, with a seeded simulator so reorgs and stuck transactions are testable.
+  </Card>
+  <Card title="0005 · Idempotency keys" icon="rotate-right" href="/decisions/0005-idempotency-strategy">
+    A retry returns the original response; the same key with a different body is a conflict, not a cache hit.
+  </Card>
+  <Card title="0006 · Saga over two-phase commit" icon="diagram-project" href="/decisions/0006-saga-over-two-phase-commit">
+    Banks and blockchains do not enrol in distributed transactions, so every step carries a compensating action.
+  </Card>
+  <Card title="0007 · Row-level tenancy" icon="users-between-lines" href="/decisions/0007-multi-tenancy-model">
+    A tenant on every record, sandbox tenants by prefix, and environment-prefixed credentials.
+  </Card>
 </CardGroup>
 
 ---
