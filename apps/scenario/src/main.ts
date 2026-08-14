@@ -112,6 +112,17 @@ class LedgerAdapter implements LedgerPort {
 }
 
 async function main(): Promise<void> {
+  if (!process.env.DATABASE_URL) {
+    console.error(
+      'DATABASE_URL is not set.\n\n' +
+        '  cp .env.example .env\n' +
+        '  docker compose -f ops/docker-compose.yml up -d\n' +
+        '  pnpm prisma migrate deploy --schema prisma/schema.prisma\n',
+    );
+    process.exitCode = 1;
+    return;
+  }
+
   const db = createPrismaClient(process.env.DATABASE_URL);
 
   console.log('Arc — corridor scenario (EUR Germany → KES mobile money)\n');

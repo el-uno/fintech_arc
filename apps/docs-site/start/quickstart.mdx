@@ -49,7 +49,21 @@ Arc runs as a single deployable. There is no service mesh to stand up and no clo
     pnpm verify
     ```
 
-    Format, lint, typecheck, architecture boundaries, and the full test suite. This is exactly what CI runs; if it is green locally it is green on a pull request.
+    Format, lint, typecheck, architecture boundaries, documentation integrity, and the full test suite. This is exactly what CI runs; if it is green locally it is green on a pull request.
+
+  </Step>
+
+  <Step title="Watch a transfer move">
+    ```bash
+    pnpm dev
+    ```
+
+    This is the step that makes it concrete. One corridor transfer runs end to end against
+    Postgres — quote, compliance, reserve, swap, on-chain settlement, payout — and every journal
+    it posts is printed, entry by entry, followed by the trial balance in each currency.
+
+    It exits non-zero if any currency fails to balance, which is why CI runs it as a step rather
+    than trusting the unit tests alone.
 
   </Step>
 </Steps>

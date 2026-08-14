@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc -b",
     "typecheck": "tsc -b",
-    "start": "node --experimental-strip-types src/main.ts"
+    "start": "node --env-file-if-exists=../../.env --experimental-strip-types src/main.ts"
   },
   "dependencies": {
     "@arc/chain": "workspace:*",
