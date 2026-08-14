@@ -1,0 +1,55 @@
+---
+title: "ADR 0006: A Transactional Outbox for At-Least-Once Delivery"
+sidebarTitle: "ADR 0006"
+description: "Why events are staged in the same transaction as the state change they describe, and why every handler must therefore be idempotent."
+icon: "inbox"
+keywords: ["transactional outbox", "at-least-once delivery", "dual write problem", "idempotent handlers", "event dispatcher", "exactly-once processing"]
+---
+
+<span className="arc-eyebrow">ADR 0006 · Accepted · Phase 0</span>
+
+<Info>
+**Status:** Accepted · **Phase:** 0 · **Supersedes:** none · **Superseded by:** none
+</Info>
+
+## Context
+
+A context must do two things when something happens: change its own state, and tell the rest of the system. Doing them separately is the **dual-write problem**.
+
+Write first, then publish, and a crash between them loses the event — the ledger has posted a journal nobody downstream knows about. Publish first, then write, and a crash announces something that never happened — webhooks fire for a transfer that does not exist.
+
+Neither ordering is safe, and no amount of retry logic in between makes it safe, because the failure is in the gap itself.
+
+## Decision
+
+An **outbox table written in the same database transaction as the state change**. A separate dispatcher drains it afterwards and invokes subscribers.
+
+The event and the fact it describes therefore commit together or not at all.
+
+The consequence is **at-least-once** delivery: never zero times, possibly twice. So every handler must be idempotent, and a `processed_event` log records which handler has seen which event. The composite primary key on `(handler_name, event_id)` makes duplicate delivery a no-op **at the database level** rather than a matter of application discipline.
+
+Failure handling in the dispatcher:
+
+- An event is marked delivered only when **every** subscriber has succeeded, or was already recorded as having succeeded.
+- On partial failure the event stays pending and retries with exponential backoff, and handlers that already succeeded are **skipped rather than re-run**.
+- A poison event is **parked**, not dropped: it must not block the queue, and it must not vanish. It becomes an operational case.
+
+## Consequences
+
+**Good.** The gap is closed by the database rather than by careful sequencing. Publishing inside a transaction is safe, because no consumer can observe state that the transaction later rolls back. At-least-once plus an idempotent handler log gives effectively-once *processing* without needing exactly-once *delivery*, which distributed systems cannot provide anyway.
+
+Correlation and causation ride on the envelope, so one trace id threads a corridor transfer across five contexts.
+
+**Costs.** Delivery is asynchronous, so a consumer's view lags the producer's by however long the dispatcher takes. Ordering is per-drain, not global — a consumer that requires strict ordering must sort by `occurredAt` itself. The outbox table grows and needs pruning.
+
+**A detail found by testing rather than design:** staging originally let `available_at` fall to the column default `now()`. The database clock can sit marginally ahead of the caller's, which makes a freshly staged event briefly un-claimable — the dispatcher finds nothing and the event waits a full poll interval for no reason. It is now set explicitly from `occurredAt`.
+
+## Alternatives
+
+*Publish directly to a broker inside the transaction* — the dual-write problem again, one layer out. A broker acknowledgement is not part of the database transaction.
+
+*Change data capture from the write-ahead log* — genuinely solves it and needs no outbox table, but couples the event schema to the physical table schema and adds infrastructure a modular monolith does not otherwise need.
+
+*Two-phase commit between database and broker* — the same objection as [ADR 0004](/decisions/0004-saga-over-two-phase-commit): the participants do not support it, and the coordinator becomes the availability bottleneck.
+
+*Fire-and-forget in-process events* — what the first version of almost every system does. It loses events on crash, silently, and the loss is discovered during reconciliation weeks later.

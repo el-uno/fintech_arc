@@ -106,11 +106,12 @@
               "decisions/index",
               "decisions/0001-money-as-integer-minor-units",
               "decisions/0002-modular-monolith",
-              "decisions/0003-double-entry-ledger",
-              "decisions/0004-chain-abstraction",
+              "decisions/0003-chain-abstraction",
+              "decisions/0004-saga-over-two-phase-commit",
               "decisions/0005-idempotency-strategy",
-              "decisions/0006-saga-over-two-phase-commit",
-              "decisions/0007-multi-tenancy-model"
+              "decisions/0006-transactional-outbox",
+              "decisions/0007-multi-tenancy-model",
+              "decisions/0008-double-entry-ledger"
             ]
           }
         ]

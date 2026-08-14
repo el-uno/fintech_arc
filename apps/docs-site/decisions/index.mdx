@@ -18,43 +18,33 @@ The value is in the parts that are uncomfortable to write. A record listing only
 
 <CardGroup cols={2}>
   <Card title="0001 · Money as integer minor units" icon="calculator" href="/decisions/0001-money-as-integer-minor-units">
-    **Phase 0.** Every monetary value is a `bigint` count of minor units. No floats anywhere, enforced by lint. The decision the rest of the system rests on.
+    Every monetary value is a bigint count of minor units. No floats in monetary APIs, enforced by ESLint rather than convention.
   </Card>
   <Card title="0002 · Modular monolith over microservices" icon="cubes" href="/decisions/0002-modular-monolith">
-    **Phase 0.** One deployable, six bounded contexts, boundaries enforced by CI. Reads as microservices; runs with one command.
+    One deployable, six bounded contexts, and a boundary that fails the build rather than eroding.
   </Card>
-  <Card title="0003 · Double-entry, enforced by the database" icon="scale-balanced" href="/decisions/0003-double-entry-ledger">
-    Balances derived from entries, entries append-only, and the balance rule enforced in Postgres as well as in code.
-  </Card>
-  <Card title="0004 · Chain-agnostic driver" icon="link" href="/decisions/0004-chain-abstraction">
+  <Card title="0003 · Chain-agnostic driver" icon="link" href="/decisions/0003-chain-abstraction">
     Settlement talks to an interface, not a chain SDK, with a seeded simulator so reorgs and stuck transactions are testable.
+  </Card>
+  <Card title="0004 · Saga over two-phase commit" icon="diagram-project" href="/decisions/0004-saga-over-two-phase-commit">
+    Banks and blockchains do not enrol in distributed transactions, so every step carries a compensating action.
   </Card>
   <Card title="0005 · Idempotency keys" icon="rotate-right" href="/decisions/0005-idempotency-strategy">
     A retry returns the original response; the same key with a different body is a conflict, not a cache hit.
   </Card>
-  <Card title="0006 · Saga over two-phase commit" icon="diagram-project" href="/decisions/0006-saga-over-two-phase-commit">
-    Banks and blockchains do not enrol in distributed transactions, so every step carries a compensating action.
+  <Card title="0006 · Transactional outbox" icon="inbox" href="/decisions/0006-transactional-outbox">
+    Events are staged in the same transaction as the state change, so delivery is at-least-once and handlers are idempotent.
   </Card>
   <Card title="0007 · Row-level tenancy" icon="users-between-lines" href="/decisions/0007-multi-tenancy-model">
     A tenant on every record, sandbox tenants by prefix, and environment-prefixed credentials.
+  </Card>
+  <Card title="0008 · Double-entry, enforced by the database" icon="scale-balanced" href="/decisions/0008-double-entry-ledger">
+    Balances derived from entries, entries append-only, and the balance rule enforced in Postgres as well as in code.
   </Card>
 </CardGroup>
 
 ---
 
-## Planned
-
-These decisions are made and implemented but not yet written up as records. They are listed so the gap is visible rather than implied.
-
-| # | Decision | Where it currently lives |
-| --- | --- | --- |
-| 0003 | Chain abstraction: one driver interface, deterministic simulator behind it | [The chain layer](/architecture/chain-layer) |
-| 0004 | Saga with compensating actions rather than two-phase commit | [The settlement saga](/architecture/settlement-saga) |
-| 0005 | Idempotency strategy: keys at the rail, the chain, and the API | [The payout that paid twice](/stories/the-payout-that-paid-twice) |
-| 0006 | Transactional outbox for at-least-once delivery | [Contexts and events](/architecture/contexts-and-events) |
-| 0007 | Multi-tenancy model for the partner platform | Phase 7 |
-
----
 
 ## The format
 
